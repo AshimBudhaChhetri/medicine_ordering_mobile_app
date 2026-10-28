@@ -10,14 +10,10 @@ export default function TabLayout() {
       initialRouteName="home"
       screenOptions={{
         headerShown: false,
-
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-
         tabBarStyle: styles.tabBar,
-
         tabBarLabelStyle: styles.tabLabel,
-
         tabBarHideOnKeyboard: true,
       }}
     >
@@ -26,7 +22,6 @@ export default function TabLayout() {
         name="home"
         options={{
           title: "Home",
-
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="home-outline"
@@ -42,7 +37,6 @@ export default function TabLayout() {
         name="requests"
         options={{
           title: "Requests",
-
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="clipboard-text-outline"
@@ -58,7 +52,6 @@ export default function TabLayout() {
         name="new-request"
         options={{
           title: "",
-
           tabBarButton: (props) => (
             <View style={styles.centerWrapper}>
               <Pressable
@@ -84,7 +77,6 @@ export default function TabLayout() {
         name="stockists"
         options={{
           title: "Stockists",
-
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="storefront-outline"
@@ -100,7 +92,6 @@ export default function TabLayout() {
         name="account"
         options={{
           title: "Account",
-
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="account-outline"
@@ -117,54 +108,32 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     height: 76,
-
     paddingTop: 8,
     paddingBottom: 8,
-
     backgroundColor: "#FFFFFF",
-
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-
   tabLabel: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
   },
-
   centerWrapper: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-
   newRequestButton: {
     width: 58,
     height: 58,
-
     borderRadius: 29,
-
     backgroundColor: colors.primary,
-
     justifyContent: "center",
     alignItems: "center",
-
     marginTop: -22,
-
-    borderWidth: 5,
+    borderWidth: 3,
     borderColor: "#FFFFFF",
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-
-    elevation: 7,
   },
-
   newRequestPressed: {
     opacity: 0.85,
     transform: [

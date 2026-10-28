@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,50 +13,84 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  RequestStatus,
-  useRequests,
-} from "../../context/RequestContext";
-
+import { useRequests } from "../../context/RequestContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
+import { Order } from "../../types/order";
 
 export default function RequestDetailsScreen() {
-  const { id } = useLocalSearchParams<{
-    id: string;
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { requests } = useRequests();
+  const { getOrderById } = useRequests();
+  const { gutter, contentMaxWidth } = useResponsive();
 
-  const {
-    gutter,
-    contentMaxWidth,
-  } = useResponsive();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const request = requests.find(
-    (item) => item.id === id
-  );
+  useEffect(() => {
+    let isMounted = true;
+    async function loadOrder() {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const found = await getOrderById(id);
+        if (isMounted) {
+          setOrder(found ?? null);
+        }
+      } catch {
+        if (isMounted) setOrder(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadOrder();
+    return () => {
+      isMounted = false;
+    };
+  }, [id, getOrderById]);
 
-  if (!request) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.notFound}>
-          <Text style={styles.notFoundTitle}>
-            Request not found
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centered}>
+          <MaterialCommunityIcons
+            name="file-document-remove-outline"
+            size={48}
+            color={colors.textMuted}
+          />
+          <Text style={styles.notFoundTitle}>Request not found</Text>
+          <Text style={styles.notFoundText}>
+            This order may have been deleted or is not accessible.
           </Text>
 
           <Pressable
             style={styles.backSimpleButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backSimpleText}>
-              Go Back
-            </Text>
+            <Text style={styles.backSimpleText}>Go Back</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
+
+  const createdDate = new Date(order.createdAt).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -62,9 +98,7 @@ export default function RequestDetailsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingHorizontal: gutter,
-          },
+          { paddingHorizontal: gutter },
         ]}
       >
         <View
@@ -80,7 +114,6 @@ export default function RequestDetailsScreen() {
           ]}
         >
           {/* Header */}
-
           <View style={styles.header}>
             <Pressable
               style={styles.backButton}
@@ -94,22 +127,14 @@ export default function RequestDetailsScreen() {
             </Pressable>
 
             <View style={styles.headerContent}>
-              <Text style={styles.pageTitle}>
-                Request Details
-              </Text>
-
-              <Text style={styles.requestNumber}>
-                {request.requestNumber}
-              </Text>
+              <Text style={styles.pageTitle}>Order Details</Text>
+              <Text style={styles.requestNumber}>{order.orderNo}</Text>
             </View>
 
-            <StatusBadge
-              status={request.status}
-            />
+            <StatusBadge status={order.status} />
           </View>
 
-          {/* Stockist */}
-
+          {/* Stockist Card */}
           <View style={styles.stockistCard}>
             <View style={styles.stockistIcon}>
               <MaterialCommunityIcons
@@ -120,156 +145,111 @@ export default function RequestDetailsScreen() {
             </View>
 
             <View style={styles.stockistInfo}>
-              <Text style={styles.label}>
-                STOCKIST
-              </Text>
-
-              <Text style={styles.stockistName}>
-                {request.stockistName}
+              <Text style={styles.label}>STOCKIST</Text>
+              <Text style={styles.stockistName}>{order.stockist?.name}</Text>
+              <Text style={styles.stockistLocation}>
+                {order.stockist?.location}
               </Text>
             </View>
           </View>
 
-          {/* Request Information */}
-
-          <Text style={styles.sectionTitle}>
-            Request Information
-          </Text>
+          {/* Order Information */}
+          <Text style={styles.sectionTitle}>Order Information</Text>
 
           <View style={styles.infoCard}>
             <InfoRow
               icon="calendar-outline"
-              label="Date Submitted"
-              value={request.createdAt}
+              label="Date Placed"
+              value={createdDate}
             />
 
             <View style={styles.divider} />
 
             <InfoRow
               icon="pill"
-              label="Total Medicines"
-              value={`${request.totalItems} items`}
+              label="Total Line Items"
+              value={`${order.items.length} items (${order.totalQuantity} units)`}
             />
 
             <View style={styles.divider} />
 
             <InfoRow
-              icon="cash"
-              label="Total Amount"
-              value={`Rs. ${request.totalAmount.toFixed(
-                2
-              )}`}
+              icon="account-outline"
+              label="Placed By"
+              value={order.createdBy?.name || "Medical Representative"}
             />
-          </View>
 
-          {/* Medicines */}
-
-          <Text style={styles.sectionTitle}>
-            Requested Medicines
-          </Text>
-
-          <View style={styles.medicineCard}>
-            {request.items.map(
-              (item, index) => (
-                <View key={item.medicineId}>
-                  <View
-                    style={styles.medicineRow}
-                  >
-                    <View
-                      style={
-                        styles.medicineIcon
-                      }
-                    >
-                      <MaterialCommunityIcons
-                        name="pill"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </View>
-
-                    <View
-                      style={
-                        styles.medicineInfo
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.medicineName
-                        }
-                      >
-                        {item.medicineName}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.medicineMeta
-                        }
-                      >
-                        {item.quantity} × Rs.{" "}
-                        {item.unitPrice.toFixed(
-                          2
-                        )}
-                      </Text>
-                    </View>
-
-                    <Text
-                      style={
-                        styles.medicineAmount
-                      }
-                    >
-                      Rs.{" "}
-                      {item.subtotal.toFixed(2)}
-                    </Text>
-                  </View>
-
-                  {index <
-                    request.items.length -
-                      1 && (
-                    <View
-                      style={
-                        styles.divider
-                      }
-                    />
-                  )}
-                </View>
-              )
+            {order.approvedBy && (
+              <>
+                <View style={styles.divider} />
+                <InfoRow
+                  icon="check-circle-outline"
+                  label="Approved By"
+                  value={order.approvedBy.name}
+                />
+              </>
             )}
           </View>
 
-          {/* Total */}
-
-          <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>
-              Total Amount
-            </Text>
-
-            <Text style={styles.totalValue}>
-              Rs.{" "}
-              {request.totalAmount.toFixed(2)}
-            </Text>
-          </View>
-
-          {/* Note */}
-
-          {request.note && (
-            <>
-              <Text style={styles.sectionTitle}>
-                Additional Note
-              </Text>
-
-              <View style={styles.noteCard}>
-                <MaterialCommunityIcons
-                  name="note-text-outline"
-                  size={21}
-                  color={colors.primary}
-                />
-
-                <Text style={styles.noteText}>
-                  {request.note}
+          {/* Rejection notice if rejected */}
+          {order.rejectionReason && (
+            <View style={styles.rejectionCard}>
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={22}
+                color={colors.danger}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rejectionTitle}>Rejection Reason</Text>
+                <Text style={styles.rejectionText}>
+                  {order.rejectionReason}
                 </Text>
               </View>
-            </>
+            </View>
           )}
+
+          {/* Requested Medicines */}
+          <Text style={styles.sectionTitle}>Requested Medicines</Text>
+
+          <View style={styles.medicineCard}>
+            {order.items.map((item, index) => (
+              <View key={item.id || item.productId || String(index)}>
+                <View style={styles.medicineRow}>
+                  <View style={styles.medicineIcon}>
+                    <MaterialCommunityIcons
+                      name="pill"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </View>
+
+                  <View style={styles.medicineInfo}>
+                    <Text style={styles.medicineName}>{item.productName}</Text>
+                    <Text style={styles.medicineMeta}>
+                      {item.quantity} units @ Rs. {item.rate.toFixed(2)}
+                      {item.bonus > 0 ? ` • +${item.bonus} free bonus` : ""}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.medicineAmount}>
+                    Rs. {item.amount.toFixed(2)}
+                  </Text>
+                </View>
+
+                {index < order.items.length - 1 && (
+                  <View style={styles.divider} />
+                )}
+              </View>
+            ))}
+          </View>
+
+          {/* Grand Total */}
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Grand Total</Text>
+            <Text style={styles.totalValue}>
+              Rs. {order.grandTotal.toFixed(2)}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -295,71 +275,46 @@ function InfoRow({
         />
       </View>
 
-      <View>
-        <Text style={styles.infoLabel}>
-          {label}
-        </Text>
-
-        <Text style={styles.infoValue}>
-          {value}
-        </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
       </View>
     </View>
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: RequestStatus;
-}) {
-  const config = {
-    PENDING: {
-      text: "Pending",
-      background: colors.warningSoft,
-      color: colors.warning,
-    },
+function StatusBadge({ status }: { status: string }) {
+  const norm = (status || "").toLowerCase();
 
-    PROCESSING: {
-      text: "Processing",
-      background: colors.primarySoft,
-      color: colors.primary,
-    },
-
-    COMPLETED: {
-      text: "Completed",
-      background: colors.successSoft,
-      color: colors.success,
-    },
-
-    CANCELLED: {
-      text: "Cancelled",
-      background: colors.dangerSoft,
-      color: colors.danger,
-    },
+  let config = {
+    text: "Pending",
+    background: colors.warningSoft,
+    color: colors.warning,
   };
 
-  const item = config[status];
+  if (norm === "approved" || norm === "completed") {
+    config = {
+      text: "Approved",
+      background: colors.successSoft,
+      color: colors.success,
+    };
+  } else if (norm === "rejected" || norm === "cancelled") {
+    config = {
+      text: "Rejected",
+      background: colors.dangerSoft,
+      color: colors.danger,
+    };
+  }
 
   return (
     <View
       style={[
         styles.statusBadge,
-        {
-          backgroundColor:
-            item.background,
-        },
+        { backgroundColor: config.background },
       ]}
     >
-      <Text
-        style={[
-          styles.statusText,
-          {
-            color: item.color,
-          },
-        ]}
-      >
-        {item.text}
+      <Text style={[styles.statusText, { color: config.color }]}>
+        {config.text}
       </Text>
     </View>
   );
@@ -370,22 +325,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   scrollContent: {
     paddingTop: 8,
     paddingBottom: 60,
   },
-
   container: {
     flex: 1,
   },
-
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 30,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 22,
   },
-
   backButton: {
     width: 44,
     height: 44,
@@ -397,35 +354,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-
   headerContent: {
     flex: 1,
   },
-
   pageTitle: {
-    fontSize: 23,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "600",
     color: colors.text,
   },
-
   requestNumber: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.primary,
   },
-
   statusBadge: {
     paddingHorizontal: 11,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 20,
   },
-
   statusText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
   },
-
   stockistCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -435,7 +386,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
   stockistIcon: {
     width: 50,
     height: 50,
@@ -444,32 +394,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   stockistInfo: {
     marginLeft: 12,
+    flex: 1,
   },
-
   label: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: colors.textSecondary,
   },
-
   stockistName: {
-    marginTop: 4,
-    fontSize: 17,
-    fontWeight: "700",
+    marginTop: 2,
+    fontSize: 16,
+    fontWeight: "600",
     color: colors.text,
   },
-
+  stockistLocation: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
   sectionTitle: {
-    marginTop: 27,
+    marginTop: 24,
     marginBottom: 11,
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: colors.text,
   },
-
   infoCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -477,13 +429,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 15,
   },
-
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
   },
-
   infoIcon: {
     width: 38,
     height: 38,
@@ -493,24 +443,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 11,
   },
-
   infoLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   infoValue: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
-
   divider: {
     height: 1,
     backgroundColor: colors.border,
   },
-
+  rejectionCard: {
+    marginTop: 14,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  rejectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.danger,
+  },
+  rejectionText: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: "400",
+  },
   medicineCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -518,13 +487,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 15,
   },
-
   medicineRow: {
     paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
   },
-
   medicineIcon: {
     width: 40,
     height: 40,
@@ -533,30 +500,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   medicineInfo: {
     flex: 1,
     marginLeft: 11,
   },
-
   medicineName: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
   },
-
   medicineMeta: {
-    marginTop: 3,
-    fontSize: 10,
+    marginTop: 2,
+    fontSize: 11,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   medicineAmount: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
     color: colors.text,
   },
-
   totalCard: {
     marginTop: 14,
     backgroundColor: colors.primarySoft,
@@ -565,51 +528,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-
   totalLabel: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
   },
-
   totalValue: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: "700",
     color: colors.primary,
   },
-
-  noteCard: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-
-  noteText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.textSecondary,
-  },
-
-  notFound: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 30,
-  },
-
   notFoundTitle: {
-    fontSize: 20,
-    fontWeight: "700",
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: "600",
     color: colors.text,
   },
-
+  notFoundText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "400",
+  },
   backSimpleButton: {
     marginTop: 18,
     backgroundColor: colors.primary,
@@ -617,9 +561,8 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 12,
   },
-
   backSimpleText: {
     color: "#FFFFFF",
-    fontWeight: "700",
+    fontWeight: "600",
   },
 });

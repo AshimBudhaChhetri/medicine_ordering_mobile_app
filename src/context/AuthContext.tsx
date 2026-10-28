@@ -7,6 +7,10 @@ import {
 } from "react";
 
 import { authService } from "../services/authService";
+import {
+  registerForPushNotifications,
+  unregisterPushToken,
+} from "../services/notificationService";
 
 import {
   AuthUser,
@@ -77,6 +81,7 @@ export function AuthProvider({
         await authService.getSession();
 
       setUser(response.user);
+      await syncPushNotifications();
     } catch {
       /**
        * Invalid/expired sessions
@@ -87,6 +92,21 @@ export function AuthProvider({
       setUser(null);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  /**
+   * Push is an enhancement, not a requirement: a denied permission or a
+   * missing EAS project must never stop someone from signing in.
+   */
+  async function syncPushNotifications() {
+    try {
+      await registerForPushNotifications();
+    } catch (error) {
+      console.warn(
+        "Could not register for push notifications",
+        error
+      );
     }
   }
 
@@ -102,19 +122,35 @@ export function AuthProvider({
       );
 
     setUser(response.user);
+    await syncPushNotifications();
   }
 
   /**
    * Real backend logout.
    */
   async function logout() {
-    await authService.logout();
+    try {
+      // Removed before sign-out clears the session the request needs.
+      await unregisterPushToken();
+    } catch (error) {
+      console.warn(
+        "Could not unregister push notifications",
+        error
+      );
+    }
 
-    setUser(null);
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.warn('authService.logout notice:', error);
+    } finally {
+      setUser(null);
+    }
   }
 
   useEffect(() => {
     refreshSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

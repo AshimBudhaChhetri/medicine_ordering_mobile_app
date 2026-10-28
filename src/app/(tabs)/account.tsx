@@ -1,17 +1,22 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { Image } from "expo-image";
+import { router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { getMediaUrl } from "../../config/api";
+import { useAuth } from "../../context/AuthContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
 export default function AccountScreen() {
+  const { user, logout } = useAuth();
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
   const handleLogout = () => {
     Alert.alert(
       "Log Out",
-      "Are you sure you want to log out?",
+      "Are you sure you want to log out of your session?",
       [
         {
           text: "Cancel",
@@ -20,16 +25,36 @@ export default function AccountScreen() {
         {
           text: "Log Out",
           style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Frontend Prototype",
-              "Authentication will be connected when the backend is ready."
-            );
+          onPress: async () => {
+            try {
+              await logout();
+              router.replace("/login");
+            } catch (error: any) {
+              Alert.alert("Logout Error", error?.message || "Failed to log out cleanly.");
+            }
           },
         },
       ]
     );
   };
+
+  const initials = (user?.name || "MR")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const avatarUrl = getMediaUrl(user?.image);
+
+  const roleText =
+    user?.role === "MR"
+      ? "Medical Representative"
+      : user?.role === "MR-head"
+      ? "Branch Head"
+      : user?.role === "superadmin"
+      ? "Super Administrator"
+      : "Medical Representative";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -37,9 +62,7 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingHorizontal: gutter,
-          },
+          { paddingHorizontal: gutter },
         ]}
       >
         <View
@@ -55,10 +78,8 @@ export default function AccountScreen() {
           ]}
         >
           {/* Header */}
-
           <View style={styles.header}>
             <Text style={styles.title}>Account</Text>
-
             <Text style={styles.subtitle}>
               Manage your profile and app settings.
             </Text>
@@ -71,7 +92,6 @@ export default function AccountScreen() {
             ]}
           >
             {/* LEFT / PROFILE */}
-
             <View
               style={[
                 styles.profileColumn,
@@ -79,38 +99,35 @@ export default function AccountScreen() {
               ]}
             >
               <View style={styles.profileCard}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>SS</Text>
-                </View>
+                {avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.avatarImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{initials}</Text>
+                  </View>
+                )}
 
-                <Text style={styles.name}>
-                  Sushma Shrestha
-                </Text>
-
-                <Text style={styles.role}>
-                  Medical Representative
-                </Text>
+                <Text style={styles.name}>{user?.name || "Medical Representative"}</Text>
+                <Text style={styles.role}>{roleText}</Text>
 
                 <View style={styles.activeBadge}>
                   <View style={styles.activeDot} />
-
-                  <Text style={styles.activeText}>
-                    Active
-                  </Text>
+                  <Text style={styles.activeText}>Active</Text>
                 </View>
               </View>
 
-              {/* Basic Information */}
-
-              <Text style={styles.sectionTitle}>
-                Personal Information
-              </Text>
+              {/* Personal Information */}
+              <Text style={styles.sectionTitle}>Personal Information</Text>
 
               <View style={styles.infoCard}>
                 <InfoRow
                   icon="account-outline"
                   label="Full Name"
-                  value="Sushma Shrestha"
+                  value={user?.name || "—"}
                 />
 
                 <View style={styles.divider} />
@@ -118,7 +135,7 @@ export default function AccountScreen() {
                 <InfoRow
                   icon="email-outline"
                   label="Email"
-                  value="sushma.mr@mediflow.com"
+                  value={user?.email || "—"}
                 />
 
                 <View style={styles.divider} />
@@ -126,64 +143,45 @@ export default function AccountScreen() {
                 <InfoRow
                   icon="phone-outline"
                   label="Phone"
-                  value="98XXXXXXXX"
+                  value={user?.phoneNumber || "Not provided"}
                 />
 
                 <View style={styles.divider} />
 
                 <InfoRow
                   icon="badge-account-outline"
-                  label="Designation"
-                  value="Medical Representative"
+                  label="Role"
+                  value={roleText}
                 />
 
-                <View style={styles.divider} />
-
-                <InfoRow
-                  icon="map-marker-outline"
-                  label="Territory / Area"
-                  value="Kathmandu Valley"
-                />
+                {user?.branchId && (
+                  <>
+                    <View style={styles.divider} />
+                    <InfoRow
+                      icon="office-building-outline"
+                      label="Branch ID"
+                      value={user.branchId}
+                    />
+                  </>
+                )}
               </View>
             </View>
 
             {/* RIGHT / SETTINGS */}
-
             <View
               style={[
                 styles.settingsColumn,
                 isTablet && styles.settingsColumnTablet,
               ]}
             >
-              <Text style={styles.sectionTitle}>
-                Account Settings
-              </Text>
+              <Text style={styles.sectionTitle}>Account Settings</Text>
 
               <View style={styles.settingsCard}>
                 <SettingsRow
-                  icon="account-edit-outline"
-                  title="Edit Profile"
-                  subtitle="Update your personal information"
-                  onPress={() =>
-                    Alert.alert(
-                      "Edit Profile",
-                      "We can build the Edit Profile screen next."
-                    )
-                  }
-                />
-
-                <View style={styles.divider} />
-
-                <SettingsRow
-                  icon="lock-outline"
-                  title="Change Password"
-                  subtitle="Update your account password"
-                  onPress={() =>
-                    Alert.alert(
-                      "Change Password",
-                      "Password management will be connected with authentication later."
-                    )
-                  }
+                  icon="account-circle-outline"
+                  title="Profile ID"
+                  subtitle={user?.id || "—"}
+                  onPress={() => {}}
                 />
 
                 <View style={styles.divider} />
@@ -191,50 +189,28 @@ export default function AccountScreen() {
                 <SettingsRow
                   icon="bell-outline"
                   title="Notifications"
-                  subtitle="Manage request notifications"
-                  onPress={() =>
-                    Alert.alert(
-                      "Notifications",
-                      "Notification settings will be added later."
-                    )
-                  }
+                  subtitle="Push notifications & alert preferences"
+                  onPress={() => router.push("/(tabs)/requests")}
                 />
               </View>
 
-              <Text style={styles.sectionTitle}>
-                Support
-              </Text>
+              <Text style={styles.sectionTitle}>Support</Text>
 
               <View style={styles.settingsCard}>
                 <SettingsRow
-                  icon="help-circle-outline"
-                  title="Help & Support"
-                  subtitle="Get help using MediFlow"
-                  onPress={() =>
-                    Alert.alert(
-                      "Help & Support",
-                      "Support information will be connected later."
-                    )
-                  }
-                />
-
-                <View style={styles.divider} />
-
-                <SettingsRow
                   icon="information-outline"
                   title="About MediFlow"
-                  subtitle="Version 1.0.0"
+                  subtitle="MediFlow MR Mobile App • v1.0.0"
                   onPress={() =>
                     Alert.alert(
                       "MediFlow",
-                      "Medical Representative Portal\nVersion 1.0.0"
+                      "Medical Representative Mobile Portal\nVersion 1.0.0\nBackend Integration Active"
                     )
                   }
                 />
               </View>
 
               {/* Logout */}
-
               <Pressable
                 style={({ pressed }) => [
                   styles.logoutButton,
@@ -247,17 +223,12 @@ export default function AccountScreen() {
                   size={20}
                   color={colors.danger}
                 />
-
-                <Text style={styles.logoutText}>
-                  Log Out
-                </Text>
+                <Text style={styles.logoutText}>Log Out</Text>
               </Pressable>
             </View>
           </View>
 
-          <Text style={styles.versionText}>
-            MediFlow MR • v1.0.0
-          </Text>
+          <Text style={styles.versionText}>MediFlow MR • v1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -284,13 +255,8 @@ function InfoRow({
       </View>
 
       <View style={styles.infoContent}>
-        <Text style={styles.infoLabel}>
-          {label}
-        </Text>
-
-        <Text style={styles.infoValue}>
-          {value}
-        </Text>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
       </View>
     </View>
   );
@@ -324,13 +290,8 @@ function SettingsRow({
       </View>
 
       <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.settingSubtitle}>
-          {subtitle}
-        </Text>
+        <Text style={styles.settingTitle}>{title}</Text>
+        <Text style={styles.settingSubtitle}>{subtitle}</Text>
       </View>
 
       <MaterialCommunityIcons
@@ -347,297 +308,218 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   scrollContent: {
     paddingTop: 12,
     paddingBottom: 120,
   },
-
   container: {
     flex: 1,
   },
-
   header: {
     marginBottom: 24,
   },
-
   title: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 27,
+    fontWeight: "600",
     color: colors.text,
   },
-
   subtitle: {
     marginTop: 6,
     fontSize: 13,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   mainLayout: {
     gap: 24,
   },
-
   mainLayoutTablet: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
-
   profileColumn: {
     width: "100%",
   },
-
   profileColumnTablet: {
     flex: 1,
   },
-
   settingsColumn: {
     width: "100%",
   },
-
   settingsColumnTablet: {
     flex: 1,
   },
-
   profileCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 22,
-
-    paddingVertical: 28,
+    paddingVertical: 26,
     paddingHorizontal: 20,
-
     alignItems: "center",
   },
-
   avatar: {
     width: 80,
     height: 80,
-
     borderRadius: 40,
-
     backgroundColor: colors.primary,
-
     alignItems: "center",
     justifyContent: "center",
   },
-
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   avatarText: {
-    fontSize: 25,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "600",
     color: "#FFFFFF",
   },
-
   name: {
-    marginTop: 15,
-
-    fontSize: 20,
-    fontWeight: "700",
-
+    marginTop: 14,
+    fontSize: 19,
+    fontWeight: "600",
     color: colors.text,
   },
-
   role: {
     marginTop: 4,
-
     fontSize: 12,
-
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   activeBadge: {
-    marginTop: 13,
-
+    marginTop: 12,
     paddingHorizontal: 11,
-    paddingVertical: 6,
-
+    paddingVertical: 5,
     backgroundColor: colors.successSoft,
-
     borderRadius: 20,
-
     flexDirection: "row",
     alignItems: "center",
-
     gap: 5,
   },
-
   activeDot: {
     width: 6,
     height: 6,
-
     borderRadius: 3,
-
     backgroundColor: colors.success,
   },
-
   activeText: {
-    fontSize: 10,
-    fontWeight: "700",
-
+    fontSize: 11,
+    fontWeight: "600",
     color: colors.success,
   },
-
   sectionTitle: {
-    marginTop: 25,
+    marginTop: 24,
     marginBottom: 11,
-
     fontSize: 16,
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.text,
   },
-
   infoCard: {
     backgroundColor: colors.card,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     borderRadius: 18,
-
     paddingHorizontal: 15,
   },
-
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-
     paddingVertical: 14,
   },
-
   infoIcon: {
     width: 40,
     height: 40,
-
     borderRadius: 12,
-
     backgroundColor: colors.primarySoft,
-
     alignItems: "center",
     justifyContent: "center",
   },
-
   infoContent: {
     flex: 1,
-
     marginLeft: 11,
   },
-
   infoLabel: {
-    fontSize: 10,
-
+    fontSize: 11,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   infoValue: {
-    marginTop: 3,
-
+    marginTop: 2,
     fontSize: 13,
-    fontWeight: "600",
-
+    fontWeight: "500",
     color: colors.text,
   },
-
   divider: {
     height: 1,
-
     backgroundColor: colors.border,
   },
-
   settingsCard: {
     backgroundColor: colors.card,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     borderRadius: 18,
-
     paddingHorizontal: 14,
   },
-
   settingsRow: {
-    minHeight: 72,
-
+    minHeight: 68,
     flexDirection: "row",
     alignItems: "center",
-
     paddingVertical: 10,
   },
-
   settingsPressed: {
     opacity: 0.65,
   },
-
   settingIcon: {
     width: 42,
     height: 42,
-
     borderRadius: 13,
-
     backgroundColor: colors.primarySoft,
-
     alignItems: "center",
     justifyContent: "center",
   },
-
   settingContent: {
     flex: 1,
-
     marginLeft: 11,
   },
-
   settingTitle: {
     fontSize: 13,
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.text,
   },
-
   settingSubtitle: {
-    marginTop: 3,
-
-    fontSize: 10,
-
+    marginTop: 2,
+    fontSize: 11,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   logoutButton: {
-    marginTop: 25,
-
+    marginTop: 24,
     minHeight: 52,
-
     borderRadius: 14,
-
     borderWidth: 1,
     borderColor: "#FECACA",
-
     backgroundColor: colors.dangerSoft,
-
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-
     gap: 7,
   },
-
   logoutText: {
     fontSize: 14,
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.danger,
   },
-
   buttonPressed: {
     opacity: 0.8,
   },
-
   versionText: {
     marginTop: 30,
-
     textAlign: "center",
-
-    fontSize: 10,
-
+    fontSize: 11,
     color: colors.textMuted,
+    fontWeight: "400",
   },
 });

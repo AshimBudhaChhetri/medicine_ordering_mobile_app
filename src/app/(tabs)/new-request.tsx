@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -15,459 +16,273 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useProducts } from "../../context/ProductContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
-
-import {
-  Medicine,
-  medicines,
-} from "../../mock/medicines";
-
 import { colors } from "../../theme/colors";
+import { Product } from "../../types/product";
+
+interface CartItemState {
+  quantity: number;
+  bonus: number;
+}
 
 export default function NewRequestScreen() {
   const params = useLocalSearchParams<{
     stockistId?: string;
   }>();
 
-  const { approvedStockists } = useStockists();
-  const { createRequest } = useRequests();
+  const { stockists } = useStockists();
+  const { products, isLoading: isProductsLoading } = useProducts();
+  const { createOrder } = useRequests();
 
-  const {
-    gutter,
-    contentMaxWidth,
-  } = useResponsive();
+  const { gutter, contentMaxWidth } = useResponsive();
 
   // =========================================================
   // STOCKIST
   // =========================================================
 
-  const [
-    stockistSearch,
-    setStockistSearch,
-  ] = useState("");
+  const [stockistSearch, setStockistSearch] = useState("");
 
-  const [
-    selectedStockistId,
-    setSelectedStockistId,
-  ] = useState<string | undefined>(
-    typeof params.stockistId === "string"
-      ? params.stockistId
-      : undefined
+  const [selectedStockistId, setSelectedStockistId] = useState<string | undefined>(
+    typeof params.stockistId === "string" ? params.stockistId : undefined
   );
 
-  const selectedStockist =
-    approvedStockists.find(
-      (stockist) =>
-        stockist.id === selectedStockistId
-    );
+  const selectedStockist = stockists.find(
+    (stockist) => stockist.id === selectedStockistId
+  );
 
   const filteredStockists = useMemo(() => {
-    const query =
-      stockistSearch
-        .trim()
-        .toLowerCase();
-
+    const query = stockistSearch.trim().toLowerCase();
     if (!query) {
       return [];
     }
 
-    return approvedStockists
+    return stockists
       .filter((stockist) => {
         return (
-          stockist.name
-            .toLowerCase()
-            .includes(query) ||
-          stockist.location
-            .toLowerCase()
-            .includes(query) ||
-          stockist.contactPerson
-            .toLowerCase()
-            .includes(query) ||
-          stockist.phone
-            .toLowerCase()
-            .includes(query)
+          stockist.name.toLowerCase().includes(query) ||
+          stockist.location.toLowerCase().includes(query)
         );
       })
       .slice(0, 10);
-  }, [
-    stockistSearch,
-    approvedStockists,
-  ]);
+  }, [stockistSearch, stockists]);
 
   // =========================================================
-  // MEDICINES
+  // MEDICINES / PRODUCTS
   // =========================================================
 
-  const [
-    medicineSearch,
-    setMedicineSearch,
-  ] = useState("");
+  const [medicineSearch, setMedicineSearch] = useState("");
 
-  /**
-   * If a stockist has been selected:
-   *
-   * - empty search = show ALL medicines
-   * - search text = show filtered medicines
-   */
   const filteredMedicines = useMemo(() => {
     if (!selectedStockist) {
       return [];
     }
 
-    const query =
-      medicineSearch
-        .trim()
-        .toLowerCase();
-
+    const query = medicineSearch.trim().toLowerCase();
     if (!query) {
-      return medicines;
+      return products;
     }
 
-    return medicines.filter(
-      (medicine) => {
-        return (
-          medicine.name
-            .toLowerCase()
-            .includes(query) ||
-          medicine.company
-            .toLowerCase()
-            .includes(query) ||
-          medicine.packSize
-            .toLowerCase()
-            .includes(query)
-        );
-      }
-    );
-  }, [
-    medicineSearch,
-    selectedStockist,
-  ]);
+    return products.filter((product) => {
+      return (
+        product.name.toLowerCase().includes(query) ||
+        product.type.toLowerCase().includes(query) ||
+        product.unit.toLowerCase().includes(query) ||
+        product.batch.toLowerCase().includes(query)
+      );
+    });
+  }, [medicineSearch, selectedStockist, products]);
 
   // =========================================================
   // CART
   // =========================================================
 
-  const [cart, setCart] =
-    useState<Record<string, number>>(
-      {}
-    );
+  const [cart, setCart] = useState<Record<string, CartItemState>>({});
 
-  const selectedMedicines =
-    medicines.filter(
-      (medicine) =>
-        (cart[medicine.id] ?? 0) > 0
-    );
+  const selectedMedicines = useMemo(() => {
+    return products.filter((product) => (cart[product.id]?.quantity ?? 0) > 0);
+  }, [products, cart]);
 
-  const medicineCount =
-    selectedMedicines.length;
+  const medicineCount = selectedMedicines.length;
 
-  const totalQuantity =
-    selectedMedicines.reduce(
-      (total, medicine) => {
-        return (
-          total +
-          (cart[medicine.id] ?? 0)
-        );
-      },
-      0
-    );
+  const totalQuantity = useMemo(() => {
+    return selectedMedicines.reduce((total, product) => {
+      const item = cart[product.id];
+      return total + (item?.quantity ?? 0) + (item?.bonus ?? 0);
+    }, 0);
+  }, [selectedMedicines, cart]);
 
-  const totalAmount =
-    selectedMedicines.reduce(
-      (total, medicine) => {
-        const quantity =
-          cart[medicine.id] ?? 0;
-
-        return (
-          total +
-          quantity * medicine.price
-        );
-      },
-      0
-    );
+  const totalAmount = useMemo(() => {
+    return selectedMedicines.reduce((total, product) => {
+      const item = cart[product.id];
+      const rate = parseFloat(product.price) || 0;
+      return total + (item?.quantity ?? 0) * rate;
+    }, 0);
+  }, [selectedMedicines, cart]);
 
   // =========================================================
   // QUANTITY MODAL
   // =========================================================
 
-  const [
-    selectedMedicine,
-    setSelectedMedicine,
-  ] = useState<Medicine | null>(
-    null
-  );
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [bonus, setBonus] = useState(0);
+  const [quantityModal, setQuantityModal] = useState(false);
 
-  const [
-    quantity,
-    setQuantity,
-  ] = useState(1);
-
-  const [
-    quantityModal,
-    setQuantityModal,
-  ] = useState(false);
-
-  function openMedicine(
-    medicine: Medicine
-  ) {
-    if (medicine.stock <= 0) {
+  function openProduct(product: Product) {
+    if (product.amount <= 0) {
       Alert.alert(
         "Out of Stock",
-        "This medicine is currently unavailable."
+        "This medicine is currently out of stock in warehouse inventory."
       );
-
       return;
     }
 
-    setSelectedMedicine(
-      medicine
-    );
-
-    const existingQuantity =
-      cart[medicine.id] ?? 1;
-
-    setQuantity(
-      existingQuantity
-    );
-
+    setSelectedProduct(product);
+    const existing = cart[product.id];
+    setQuantity(existing?.quantity ?? 1);
+    setBonus(existing?.bonus ?? 0);
     setQuantityModal(true);
   }
 
-  function addMedicineToCart() {
-    if (!selectedMedicine) {
-      return;
-    }
+  function addProductToCart() {
+    if (!selectedProduct) return;
 
     if (quantity < 1) {
-      Alert.alert(
-        "Invalid Quantity",
-        "Quantity must be at least 1."
-      );
-
+      Alert.alert("Invalid Quantity", "Quantity must be at least 1.");
       return;
     }
 
-    if (
-      quantity >
-      selectedMedicine.stock
-    ) {
+    if (quantity + bonus > selectedProduct.amount) {
       Alert.alert(
-        "Stock unavailable",
-        `Only ${selectedMedicine.stock} units are currently available.`
+        "Stock Limit Exceeded",
+        `Only ${selectedProduct.amount} units available in inventory.`
       );
-
       return;
     }
 
     setCart((current) => ({
       ...current,
-
-      [selectedMedicine.id]:
+      [selectedProduct.id]: {
         quantity,
+        bonus,
+      },
     }));
 
     setQuantityModal(false);
-
-    setSelectedMedicine(
-      null
-    );
-
+    setSelectedProduct(null);
     setQuantity(1);
-
+    setBonus(0);
     setMedicineSearch("");
   }
 
-  function changeCartQuantity(
-    medicine: Medicine,
-    amount: number
-  ) {
-    const currentQuantity =
-      cart[medicine.id] ?? 0;
+  function changeCartQuantity(product: Product, delta: number) {
+    const current = cart[product.id];
+    if (!current) return;
 
-    const newQuantity =
-      currentQuantity + amount;
-
+    const newQuantity = current.quantity + delta;
     if (newQuantity <= 0) {
-      removeFromCart(
-        medicine.id
-      );
-
+      removeFromCart(product.id);
       return;
     }
 
-    if (
-      newQuantity >
-      medicine.stock
-    ) {
+    if (newQuantity + current.bonus > product.amount) {
       Alert.alert(
-        "Stock unavailable",
-        `Only ${medicine.stock} units are currently available.`
+        "Stock Limit Exceeded",
+        `Only ${product.amount} units available in inventory.`
       );
-
       return;
     }
 
-    setCart((current) => ({
-      ...current,
-
-      [medicine.id]:
-        newQuantity,
+    setCart((prev) => ({
+      ...prev,
+      [product.id]: {
+        ...current,
+        quantity: newQuantity,
+      },
     }));
   }
 
-  function removeFromCart(
-    medicineId: string
-  ) {
+  function removeFromCart(productId: string) {
     setCart((current) => {
-      const updated = {
-        ...current,
-      };
-
-      delete updated[
-        medicineId
-      ];
-
+      const updated = { ...current };
+      delete updated[productId];
       return updated;
     });
   }
 
   // =========================================================
-  // CART MODAL
+  // CART MODAL & SUBMIT
   // =========================================================
 
-  const [
-    cartModal,
-    setCartModal,
-  ] = useState(false);
-
-  const [
-    note,
-    setNote,
-  ] = useState("");
-
-  // =========================================================
-  // RESET FORM
-  // =========================================================
+  const [cartModal, setCartModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function resetRequestForm() {
-    setSelectedStockistId(
-      undefined
-    );
-
+    setSelectedStockistId(undefined);
     setStockistSearch("");
-
     setMedicineSearch("");
-
     setCart({});
-
-    setNote("");
-
-    setSelectedMedicine(
-      null
-    );
-
+    setSelectedProduct(null);
     setQuantity(1);
-
+    setBonus(0);
     setQuantityModal(false);
-
     setCartModal(false);
   }
 
-  // =========================================================
-  // SUBMIT REQUEST
-  // =========================================================
-
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!selectedStockist) {
-      Alert.alert(
-        "Select Stockist",
-        "Please select a stockist."
-      );
-
+      Alert.alert("Select Stockist", "Please select a stockist.");
       return;
     }
 
-    if (
-      selectedMedicines.length ===
-      0
-    ) {
-      Alert.alert(
-        "Empty Request",
-        "Please add at least one medicine."
-      );
-
+    if (selectedMedicines.length === 0) {
+      Alert.alert("Empty Request", "Please add at least one medicine.");
       return;
     }
 
-    const items =
-      selectedMedicines.map(
-        (medicine) => {
-          const itemQuantity =
-            cart[medicine.id] ?? 0;
+    try {
+      setIsSubmitting(true);
 
-          return {
-            medicineId:
-              medicine.id,
-
-            medicineName:
-              medicine.name,
-
-            quantity:
-              itemQuantity,
-
-            unitPrice:
-              medicine.price,
-
-            subtotal:
-              itemQuantity *
-              medicine.price,
-          };
-        }
-      );
-
-    const request =
-      createRequest({
-        stockistId:
-          selectedStockist.id,
-
-        stockistName:
-          selectedStockist.name,
-
-        items,
-
-        // Existing RequestContext
-        // currently uses totalItems.
-        // For now we store total quantity here.
-        totalItems:
-          totalQuantity,
-
-        totalAmount,
-
-        note:
-          note.trim() ||
-          undefined,
+      const items = selectedMedicines.map((product) => {
+        const itemState = cart[product.id];
+        return {
+          productName: product.name,
+          quantity: itemState.quantity,
+          bonus: itemState.bonus || 0,
+          rate: parseFloat(product.price) || 0,
+          productId: product.id,
+        };
       });
 
-    /**
-     * Clear the form before
-     * opening Request Details.
-     */
-    resetRequestForm();
+      const order = await createOrder({
+        stockistId: selectedStockist.id,
+        items,
+      });
 
-    /**
-     * Push instead of replace so
-     * navigation history remains valid.
-     */
-    router.push({
-      pathname:
-        "/request/[id]",
+      resetRequestForm();
 
-      params: {
-        id: request.id,
-      },
-    });
+      Alert.alert(
+        "Order Created",
+        `Order ${order.orderNo} has been submitted successfully.`,
+        [
+          {
+            text: "View Order",
+            onPress: () =>
+              router.push({
+                pathname: "/request/[id]",
+                params: { id: order.id },
+              }),
+          },
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert("Order Submission Failed", err?.message || "Failed to submit order.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   // =========================================================
@@ -475,636 +290,301 @@ export default function NewRequestScreen() {
   // =========================================================
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-    >
+    <SafeAreaView style={styles.safeArea}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-
-          {
-            paddingHorizontal:
-              gutter,
-          },
+          { paddingHorizontal: gutter },
         ]}
       >
         <View
           style={[
             styles.container,
-
             contentMaxWidth
               ? {
                   width: "100%",
-
                   maxWidth: 850,
-
-                  alignSelf:
-                    "center",
+                  alignSelf: "center",
                 }
               : undefined,
           ]}
         >
-          {/* =================================================
-              HEADER
-          ================================================== */}
-
-          <View
-            style={styles.header}
-          >
-            <Text
-              style={styles.title}
-            >
-              New Medicine Request
-            </Text>
-
-            <Text
-              style={styles.subtitle}
-            >
-              Choose a stockist
-              and add the medicines
-              they require.
+          {/* HEADER */}
+          <View style={styles.header}>
+            <Text style={styles.title}>New Medicine Request</Text>
+            <Text style={styles.subtitle}>
+              Choose a stockist and add the medicines they require.
             </Text>
           </View>
 
-          {/* =================================================
-              STEP 1 - STOCKIST
-          ================================================== */}
-
-          <View
-            style={
-              styles.stepHeader
-            }
-          >
-            <View
-              style={
-                styles.stepNumber
-              }
-            >
-              <Text
-                style={
-                  styles.stepNumberText
-                }
-              >
-                1
-              </Text>
+          {/* STEP 1 - STOCKIST */}
+          <View style={styles.stepHeader}>
+            <View style={styles.stepNumber}>
+              <Text style={styles.stepNumberText}>1</Text>
             </View>
-
-            <Text
-              style={
-                styles.stepTitle
-              }
-            >
-              Select Stockist
-            </Text>
+            <Text style={styles.stepTitle}>Select Stockist</Text>
           </View>
 
           {!selectedStockist ? (
             <>
               {/* STOCKIST SEARCH */}
-
-              <View
-                style={
-                  styles.searchContainer
-                }
-              >
+              <View style={styles.searchContainer}>
                 <MaterialCommunityIcons
                   name="magnify"
                   size={21}
-                  color={
-                    colors.textMuted
-                  }
+                  color={colors.textMuted}
                 />
-
                 <TextInput
-                  value={
-                    stockistSearch
-                  }
-                  onChangeText={
-                    setStockistSearch
-                  }
-                  placeholder="Search stockist name, area or contact..."
-                  placeholderTextColor={
-                    colors.textMuted
-                  }
-                  style={
-                    styles.searchInput
-                  }
+                  value={stockistSearch}
+                  onChangeText={setStockistSearch}
+                  placeholder="Search stockist name or location..."
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.searchInput}
                   autoCorrect={false}
                 />
-
-                {stockistSearch.length >
-                  0 && (
-                  <Pressable
-                    onPress={() =>
-                      setStockistSearch(
-                        ""
-                      )
-                    }
-                  >
+                {stockistSearch.length > 0 && (
+                  <Pressable onPress={() => setStockistSearch("")}>
                     <MaterialCommunityIcons
                       name="close-circle"
                       size={19}
-                      color={
-                        colors.textMuted
-                      }
+                      color={colors.textMuted}
                     />
                   </Pressable>
                 )}
               </View>
 
               {/* STOCKIST RESULTS */}
-
-              {filteredStockists.map(
-                (stockist) => (
-                  <Pressable
-                    key={
-                      stockist.id
-                    }
-                    style={({ pressed }) => [
-                      styles.resultCard,
-
-                      pressed &&
-                        styles.cardPressed,
-                    ]}
-                    onPress={() => {
-                      setSelectedStockistId(
-                        stockist.id
-                      );
-
-                      setStockistSearch(
-                        ""
-                      );
-                    }}
-                  >
-                    <View
-                      style={
-                        styles.resultIcon
-                      }
-                    >
-                      <MaterialCommunityIcons
-                        name="storefront-outline"
-                        size={21}
-                        color={
-                          colors.primary
-                        }
-                      />
-                    </View>
-
-                    <View
-                      style={
-                        styles.resultInfo
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.resultName
-                        }
-                      >
-                        {
-                          stockist.name
-                        }
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.resultMeta
-                        }
-                      >
-                        {
-                          stockist.location
-                        }
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.contactText
-                        }
-                      >
-                        {
-                          stockist.contactPerson
-                        }
-                      </Text>
-                    </View>
-
+              {filteredStockists.map((stockist) => (
+                <Pressable
+                  key={stockist.id}
+                  style={({ pressed }) => [
+                    styles.resultCard,
+                    pressed && styles.cardPressed,
+                  ]}
+                  onPress={() => {
+                    setSelectedStockistId(stockist.id);
+                    setStockistSearch("");
+                  }}
+                >
+                  <View style={styles.resultIcon}>
                     <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color={
-                        colors.textMuted
-                      }
+                      name="storefront-outline"
+                      size={21}
+                      color={colors.primary}
                     />
-                  </Pressable>
-                )
-              )}
+                  </View>
+
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultName}>{stockist.name}</Text>
+                    <Text style={styles.resultMeta}>{stockist.location}</Text>
+                  </View>
+
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={22}
+                    color={colors.textMuted}
+                  />
+                </Pressable>
+              ))}
 
               {/* NO RESULTS */}
-
-              {stockistSearch.trim()
-                .length > 0 &&
-                filteredStockists.length ===
-                  0 && (
-                  <View
-                    style={
-                      styles.noResult
-                    }
-                  >
+              {stockistSearch.trim().length > 0 &&
+                filteredStockists.length === 0 && (
+                  <View style={styles.noResult}>
                     <MaterialCommunityIcons
                       name="store-search-outline"
                       size={36}
-                      color={
-                        colors.textMuted
-                      }
+                      color={colors.textMuted}
                     />
-
-                    <Text
-                      style={
-                        styles.noResultTitle
-                      }
-                    >
-                      No stockist found
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.noResultText
-                      }
-                    >
-                      Try another
-                      stockist name or
-                      location.
+                    <Text style={styles.noResultTitle}>No stockist found</Text>
+                    <Text style={styles.noResultText}>
+                      Try another stockist name or add a new stockist.
                     </Text>
 
                     <Pressable
-                      style={
-                        styles.addStockistButton
-                      }
-                      onPress={() =>
-                        router.push(
-                          "/stockist/add"
-                        )
-                      }
+                      style={styles.addStockistButton}
+                      onPress={() => router.push("/stockist/add")}
                     >
                       <MaterialCommunityIcons
                         name="store-plus-outline"
                         size={18}
-                        color={
-                          colors.primary
-                        }
+                        color={colors.primary}
                       />
-
-                      <Text
-                        style={
-                          styles.addStockistText
-                        }
-                      >
-                        Request New
-                        Stockist
-                      </Text>
+                      <Text style={styles.addStockistText}>Add New Stockist</Text>
                     </Pressable>
                   </View>
                 )}
+
+              {stockistSearch.trim().length === 0 && stockists.length === 0 && (
+                <View style={styles.noResult}>
+                  <MaterialCommunityIcons
+                    name="storefront-outline"
+                    size={36}
+                    color={colors.textMuted}
+                  />
+                  <Text style={styles.noResultTitle}>No stockists registered</Text>
+                  <Text style={styles.noResultText}>
+                    Add your first stockist to start placing requests.
+                  </Text>
+                  <Pressable
+                    style={styles.addStockistButton}
+                    onPress={() => router.push("/stockist/add")}
+                  >
+                    <MaterialCommunityIcons
+                      name="plus"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.addStockistText}>Add Stockist</Text>
+                  </Pressable>
+                </View>
+              )}
             </>
           ) : (
             /* SELECTED STOCKIST */
-
-            <View
-              style={
-                styles.selectedStockistCard
-              }
-            >
-              <View
-                style={
-                  styles.resultIcon
-                }
-              >
+            <View style={styles.selectedStockistCard}>
+              <View style={styles.resultIcon}>
                 <MaterialCommunityIcons
                   name="storefront-outline"
                   size={21}
-                  color={
-                    colors.primary
-                  }
+                  color={colors.primary}
                 />
               </View>
 
-              <View
-                style={
-                  styles.resultInfo
-                }
-              >
-                <Text
-                  style={
-                    styles.selectedLabel
-                  }
-                >
-                  SELECTED STOCKIST
-                </Text>
-
-                <Text
-                  style={
-                    styles.resultName
-                  }
-                >
-                  {
-                    selectedStockist.name
-                  }
-                </Text>
-
-                <Text
-                  style={
-                    styles.resultMeta
-                  }
-                >
-                  {
-                    selectedStockist.location
-                  }
-                </Text>
+              <View style={styles.resultInfo}>
+                <Text style={styles.selectedLabel}>Selected Stockist</Text>
+                <Text style={styles.resultName}>{selectedStockist.name}</Text>
+                <Text style={styles.resultMeta}>{selectedStockist.location}</Text>
               </View>
 
               <Pressable
                 onPress={() => {
-                  if (
-                    selectedMedicines.length >
-                    0
-                  ) {
+                  if (selectedMedicines.length > 0) {
                     Alert.alert(
                       "Change Stockist?",
                       "Changing the stockist will clear the medicines currently in your cart.",
                       [
-                        {
-                          text: "Cancel",
-
-                          style:
-                            "cancel",
-                        },
-
+                        { text: "Cancel", style: "cancel" },
                         {
                           text: "Change",
-
-                          style:
-                            "destructive",
-
+                          style: "destructive",
                           onPress: () => {
-                            setSelectedStockistId(
-                              undefined
-                            );
-
+                            setSelectedStockistId(undefined);
                             setCart({});
-
-                            setMedicineSearch(
-                              ""
-                            );
+                            setMedicineSearch("");
                           },
                         },
                       ]
                     );
                   } else {
-                    setSelectedStockistId(
-                      undefined
-                    );
+                    setSelectedStockistId(undefined);
                   }
                 }}
               >
-                <Text
-                  style={
-                    styles.changeText
-                  }
-                >
-                  Change
-                </Text>
+                <Text style={styles.changeText}>Change</Text>
               </Pressable>
             </View>
           )}
 
-          {/* =================================================
-              STEP 2 - MEDICINES
-          ================================================== */}
-
+          {/* STEP 2 - MEDICINES */}
           {selectedStockist && (
             <>
-              <View
-                style={[
-                  styles.stepHeader,
-
-                  styles.medicineStep,
-                ]}
-              >
-                <View
-                  style={
-                    styles.stepNumber
-                  }
-                >
-                  <Text
-                    style={
-                      styles.stepNumberText
-                    }
-                  >
-                    2
-                  </Text>
+              <View style={[styles.stepHeader, styles.medicineStep]}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>2</Text>
                 </View>
-
-                <Text
-                  style={
-                    styles.stepTitle
-                  }
-                >
-                  Add Medicines
-                </Text>
+                <Text style={styles.stepTitle}>Add Medicines</Text>
               </View>
 
               {/* MEDICINE SEARCH */}
-
-              <View
-                style={
-                  styles.searchContainer
-                }
-              >
+              <View style={styles.searchContainer}>
                 <MaterialCommunityIcons
                   name="magnify"
                   size={20}
-                  color={
-                    colors.textMuted
-                  }
+                  color={colors.textMuted}
                 />
-
                 <TextInput
-                  value={
-                    medicineSearch
-                  }
-                  onChangeText={
-                    setMedicineSearch
-                  }
-                  placeholder="Search medicine or company..."
-                  placeholderTextColor={
-                    colors.textMuted
-                  }
-                  style={
-                    styles.searchInput
-                  }
+                  value={medicineSearch}
+                  onChangeText={setMedicineSearch}
+                  placeholder="Search medicine, category, or batch..."
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.searchInput}
                   autoCorrect={false}
                 />
-
-                {medicineSearch.length >
-                  0 && (
-                  <Pressable
-                    onPress={() =>
-                      setMedicineSearch(
-                        ""
-                      )
-                    }
-                  >
+                {medicineSearch.length > 0 && (
+                  <Pressable onPress={() => setMedicineSearch("")}>
                     <MaterialCommunityIcons
                       name="close-circle"
                       size={19}
-                      color={
-                        colors.textMuted
-                      }
+                      color={colors.textMuted}
                     />
                   </Pressable>
                 )}
               </View>
 
-              {/* MEDICINE LIST HEADER */}
-
-              <View
-                style={
-                  styles.medicineListHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.medicineListTitle
-                  }
-                >
-                  {medicineSearch.trim()
-                    ? "Search Results"
-                    : "All Medicines"}
+              {/* LIST HEADER */}
+              <View style={styles.medicineListHeader}>
+                <Text style={styles.medicineListTitle}>
+                  {medicineSearch.trim() ? "Search Results" : "Catalogue Products"}
                 </Text>
-
-                <Text
-                  style={
-                    styles.medicineCount
-                  }
-                >
-                  {
-                    filteredMedicines.length
-                  }
+                <Text style={styles.medicineCount}>
+                  {filteredMedicines.length}
                 </Text>
               </View>
 
-              {/* MEDICINES */}
-
-              {filteredMedicines.map(
-                (medicine) => {
-                  const added =
-                    cart[
-                      medicine.id
-                    ] ?? 0;
-
-                  const outOfStock =
-                    medicine.stock ===
-                    0;
-
-                  const lowStock =
-                    medicine.stock >
-                      0 &&
-                    medicine.stock <=
-                      10;
+              {isProductsLoading ? (
+                <View style={{ paddingVertical: 30, alignItems: "center" }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : (
+                filteredMedicines.map((product) => {
+                  const added = cart[product.id]?.quantity ?? 0;
+                  const outOfStock = product.amount <= 0;
+                  const lowStock = product.amount > 0 && product.amount <= 10;
+                  const price = parseFloat(product.price) || 0;
 
                   return (
                     <Pressable
-                      key={
-                        medicine.id
-                      }
-                      style={({
-                        pressed,
-                      }) => [
+                      key={product.id}
+                      style={({ pressed }) => [
                         styles.medicineResult,
-
-                        outOfStock &&
-                          styles.medicineDisabled,
-
-                        pressed &&
-                          !outOfStock &&
-                          styles.cardPressed,
+                        outOfStock && styles.medicineDisabled,
+                        pressed && !outOfStock && styles.cardPressed,
                       ]}
-                      onPress={() =>
-                        openMedicine(
-                          medicine
-                        )
-                      }
+                      onPress={() => openProduct(product)}
                     >
-                      <View
-                        style={
-                          styles.medicineIcon
-                        }
-                      >
+                      <View style={styles.medicineIcon}>
                         <MaterialCommunityIcons
                           name="pill"
                           size={21}
-                          color={
-                            outOfStock
-                              ? colors.textMuted
-                              : colors.primary
-                          }
+                          color={outOfStock ? colors.textMuted : colors.primary}
                         />
                       </View>
 
-                      <View
-                        style={
-                          styles.resultInfo
-                        }
-                      >
+                      <View style={styles.resultInfo}>
                         <Text
                           style={[
                             styles.resultName,
-
-                            outOfStock &&
-                              styles.disabledText,
+                            outOfStock && styles.disabledText,
                           ]}
                         >
-                          {
-                            medicine.name
-                          }
+                          {product.name}
                         </Text>
 
-                        <Text
-                          style={
-                            styles.resultMeta
-                          }
-                        >
-                          {
-                            medicine.company
-                          }{" "}
-                          •{" "}
-                          {
-                            medicine.packSize
-                          }
+                        <Text style={styles.resultMeta}>
+                          {product.type} • {product.unit} • Batch: {product.batch}
                         </Text>
 
-                        <View
-                          style={
-                            styles.medicineMetaRow
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.price
-                            }
-                          >
-                            Rs.{" "}
-                            {
-                              medicine.price
-                            }
+                        <View style={styles.medicineMetaRow}>
+                          <Text style={styles.price}>
+                            Rs. {price.toFixed(2)}
                           </Text>
 
                           <Text
                             style={[
                               styles.stock,
-
                               outOfStock
                                 ? styles.outOfStock
                                 : lowStock
@@ -1115,23 +595,15 @@ export default function NewRequestScreen() {
                             {outOfStock
                               ? "Out of Stock"
                               : lowStock
-                              ? `Low Stock (${medicine.stock})`
-                              : `In Stock (${medicine.stock})`}
+                              ? `Low Stock (${product.amount})`
+                              : `In Stock (${product.amount})`}
                           </Text>
                         </View>
                       </View>
 
                       {added > 0 ? (
-                        <View
-                          style={
-                            styles.addedBadge
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.addedText
-                            }
-                          >
+                        <View style={styles.addedBadge}>
+                          <Text style={styles.addedText}>
                             ✓ {added} added
                           </Text>
                         </View>
@@ -1139,51 +611,25 @@ export default function NewRequestScreen() {
                         <MaterialCommunityIcons
                           name="plus-circle-outline"
                           size={26}
-                          color={
-                            outOfStock
-                              ? colors.textMuted
-                              : colors.primary
-                          }
+                          color={outOfStock ? colors.textMuted : colors.primary}
                         />
                       )}
                     </Pressable>
                   );
-                }
+                })
               )}
 
-              {/* NO MEDICINE RESULTS */}
-
-              {filteredMedicines.length ===
-                0 && (
-                <View
-                  style={
-                    styles.noResult
-                  }
-                >
+              {/* NO MEDICINES FOUND */}
+              {!isProductsLoading && filteredMedicines.length === 0 && (
+                <View style={styles.noResult}>
                   <MaterialCommunityIcons
                     name="pill-off"
                     size={36}
-                    color={
-                      colors.textMuted
-                    }
+                    color={colors.textMuted}
                   />
-
-                  <Text
-                    style={
-                      styles.noResultTitle
-                    }
-                  >
-                    No medicines found
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.noResultText
-                    }
-                  >
-                    Try another
-                    medicine or company
-                    name.
+                  <Text style={styles.noResultTitle}>No products found</Text>
+                  <Text style={styles.noResultText}>
+                    Try searching for another product name or category.
                   </Text>
                 </View>
               )}
@@ -1192,397 +638,188 @@ export default function NewRequestScreen() {
         </View>
       </ScrollView>
 
-      {/* =====================================================
-          FLOATING CART
-      ====================================================== */}
-
+      {/* FLOATING CART BAR */}
       {medicineCount > 0 && (
         <Pressable
-          style={[
-            styles.cartBar,
-
-            {
-              marginHorizontal:
-                gutter,
-            },
-          ]}
-          onPress={() =>
-            setCartModal(true)
-          }
+          style={[styles.cartBar, { marginHorizontal: gutter }]}
+          onPress={() => setCartModal(true)}
         >
-          <View
-            style={styles.cartIcon}
-          >
+          <View style={styles.cartIcon}>
             <MaterialCommunityIcons
               name="cart-outline"
               size={23}
               color="#FFFFFF"
             />
-
-            <View
-              style={
-                styles.cartCountBadge
-              }
-            >
-              <Text
-                style={
-                  styles.cartCountText
-                }
-              >
-                {medicineCount}
-              </Text>
+            <View style={styles.cartCountBadge}>
+              <Text style={styles.cartCountText}>{medicineCount}</Text>
             </View>
           </View>
 
-          <View
-            style={styles.cartInfo}
-          >
-            <Text
-              style={styles.cartTitle}
-            >
-              {medicineCount}{" "}
-              {medicineCount === 1
-                ? "medicine"
-                : "medicines"}
+          <View style={styles.cartInfo}>
+            <Text style={styles.cartTitle}>
+              {medicineCount} {medicineCount === 1 ? "medicine" : "medicines"}
             </Text>
-
-            <Text
-              style={styles.cartUnits}
-            >
-              {totalQuantity} total
-              units
-            </Text>
+            <Text style={styles.cartUnits}>{totalQuantity} total units</Text>
           </View>
 
-          <View
-            style={
-              styles.cartAmountArea
-            }
-          >
-            <Text
-              style={
-                styles.cartAmount
-              }
-            >
-              Rs.{" "}
-              {totalAmount.toFixed(
-                2
-              )}
-            </Text>
-
-            <Text
-              style={
-                styles.viewCartText
-              }
-            >
-              View Cart →
-            </Text>
+          <View style={styles.cartAmountArea}>
+            <Text style={styles.cartAmount}>Rs. {totalAmount.toFixed(2)}</Text>
+            <Text style={styles.viewCartText}>View Cart →</Text>
           </View>
         </Pressable>
       )}
 
-      {/* =====================================================
-          QUANTITY MODAL
-      ====================================================== */}
-
+      {/* QUANTITY MODAL */}
       <Modal
         visible={quantityModal}
         transparent
         animationType="slide"
-        onRequestClose={() =>
-          setQuantityModal(false)
-        }
+        onRequestClose={() => setQuantityModal(false)}
       >
-        <View
-          style={
-            styles.modalOverlay
-          }
-        >
-          <View
-            style={
-              styles.bottomSheet
-            }
-          >
-            {selectedMedicine && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.bottomSheet}>
+            {selectedProduct && (
               <>
-                <View
-                  style={
-                    styles.modalHandle
-                  }
-                />
+                <View style={styles.modalHandle} />
 
-                <View
-                  style={
-                    styles.modalMedicineHeader
-                  }
-                >
-                  <View
-                    style={
-                      styles.largeMedicineIcon
-                    }
-                  >
+                <View style={styles.modalMedicineHeader}>
+                  <View style={styles.largeMedicineIcon}>
                     <MaterialCommunityIcons
                       name="pill"
                       size={26}
-                      color={
-                        colors.primary
-                      }
+                      color={colors.primary}
                     />
                   </View>
 
-                  <View
-                    style={
-                      styles.modalMedicineInfo
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.modalTitle
-                      }
-                    >
-                      {
-                        selectedMedicine.name
-                      }
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.modalSubtitle
-                      }
-                    >
-                      {
-                        selectedMedicine.company
-                      }{" "}
-                      •{" "}
-                      {
-                        selectedMedicine.packSize
-                      }
+                  <View style={styles.modalMedicineInfo}>
+                    <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {selectedProduct.type} • {selectedProduct.unit}
                     </Text>
                   </View>
 
-                  <Pressable
-                    onPress={() =>
-                      setQuantityModal(
-                        false
-                      )
-                    }
-                  >
+                  <Pressable onPress={() => setQuantityModal(false)}>
                     <MaterialCommunityIcons
                       name="close"
                       size={24}
-                      color={
-                        colors.textMuted
-                      }
+                      color={colors.textMuted}
                     />
                   </Pressable>
                 </View>
 
                 {/* PRODUCT INFO */}
-
-                <View
-                  style={
-                    styles.productInfoRow
-                  }
-                >
-                  <View
-                    style={
-                      styles.productInfoBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.smallLabel
-                      }
-                    >
-                      PRICE
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.productInfoValue
-                      }
-                    >
-                      Rs.{" "}
-                      {
-                        selectedMedicine.price
-                      }
+                <View style={styles.productInfoRow}>
+                  <View style={styles.productInfoBox}>
+                    <Text style={styles.smallLabel}>Rate</Text>
+                    <Text style={styles.productInfoValue}>
+                      Rs. {(parseFloat(selectedProduct.price) || 0).toFixed(2)}
                     </Text>
                   </View>
 
-                  <View
-                    style={
-                      styles.productInfoBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.smallLabel
-                      }
-                    >
-                      AVAILABLE
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.productInfoValue
-                      }
-                    >
-                      {
-                        selectedMedicine.stock
-                      }
+                  <View style={styles.productInfoBox}>
+                    <Text style={styles.smallLabel}>Available Stock</Text>
+                    <Text style={styles.productInfoValue}>
+                      {selectedProduct.amount}
                     </Text>
                   </View>
                 </View>
 
-                {/* QUANTITY */}
-
-                <Text
-                  style={
-                    styles.quantityLabel
-                  }
-                >
-                  Enter Quantity
-                </Text>
-
-                <View
-                  style={
-                    styles.quantityPicker
-                  }
-                >
+                {/* QUANTITY PICKER */}
+                <Text style={styles.quantityLabel}>Enter Quantity</Text>
+                <View style={styles.quantityPicker}>
                   <Pressable
-                    style={
-                      styles.quantityButton
-                    }
-                    onPress={() =>
-                      setQuantity(
-                        Math.max(
-                          1,
-
-                          quantity - 1
-                        )
-                      )
-                    }
+                    style={styles.quantityButton}
+                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
                   >
                     <MaterialCommunityIcons
                       name="minus"
                       size={22}
-                      color={
-                        colors.primary
-                      }
+                      color={colors.primary}
                     />
                   </Pressable>
 
                   <TextInput
-                    value={String(
-                      quantity
-                    )}
-                    onChangeText={(
-                      value
-                    ) => {
-                      const clean =
-                        value.replace(
-                          /\D/g,
-
-                          ""
-                        );
-
-                      if (!clean) {
-                        setQuantity(
-                          1
-                        );
-
-                        return;
-                      }
-
-                      setQuantity(
-                        Number(clean)
-                      );
+                    value={String(quantity)}
+                    onChangeText={(val) => {
+                      const clean = val.replace(/\D/g, "");
+                      setQuantity(clean ? Number(clean) : 1);
                     }}
                     keyboardType="number-pad"
                     selectTextOnFocus
-                    style={
-                      styles.quantityInput
-                    }
+                    style={styles.quantityInput}
                   />
 
                   <Pressable
-                    style={
-                      styles.quantityButton
-                    }
+                    style={styles.quantityButton}
                     onPress={() =>
                       setQuantity(
-                        Math.min(
-                          selectedMedicine.stock,
-
-                          quantity + 1
-                        )
+                        Math.min(selectedProduct.amount - bonus, quantity + 1)
                       )
                     }
                   >
                     <MaterialCommunityIcons
                       name="plus"
                       size={22}
-                      color={
-                        colors.primary
-                      }
+                      color={colors.primary}
                     />
                   </Pressable>
                 </View>
 
+                {/* BONUS UNITS */}
+                <View style={styles.bonusRow}>
+                  <View>
+                    <Text style={styles.bonusLabel}>Bonus Units (Free)</Text>
+                    <Text style={styles.bonusSubtext}>Promotional non-billed units</Text>
+                  </View>
+                  <View style={styles.bonusPicker}>
+                    <Pressable
+                      style={styles.bonusButton}
+                      onPress={() => setBonus(Math.max(0, bonus - 1))}
+                    >
+                      <MaterialCommunityIcons
+                        name="minus"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </Pressable>
+                    <Text style={styles.bonusText}>{bonus}</Text>
+                    <Pressable
+                      style={styles.bonusButton}
+                      onPress={() =>
+                        setBonus(
+                          Math.min(selectedProduct.amount - quantity, bonus + 1)
+                        )
+                      }
+                    >
+                      <MaterialCommunityIcons
+                        name="plus"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+
                 {/* TOTAL */}
-
-                <View
-                  style={
-                    styles.modalTotal
-                  }
-                >
-                  <Text
-                    style={
-                      styles.totalLabel
-                    }
-                  >
-                    Total
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.totalValue
-                    }
-                  >
-                    Rs.{" "}
-                    {(
-                      quantity *
-                      selectedMedicine.price
-                    ).toFixed(2)}
+                <View style={styles.modalTotal}>
+                  <Text style={styles.totalLabel}>Line Total</Text>
+                  <Text style={styles.totalValue}>
+                    Rs. {(quantity * (parseFloat(selectedProduct.price) || 0)).toFixed(2)}
                   </Text>
                 </View>
 
-                {/* ADD CART */}
-
+                {/* ADD CART BUTTON */}
                 <Pressable
-                  style={
-                    styles.primaryButton
-                  }
-                  onPress={
-                    addMedicineToCart
-                  }
+                  style={styles.primaryButton}
+                  onPress={addProductToCart}
                 >
                   <MaterialCommunityIcons
                     name="cart-plus"
                     size={20}
                     color="#FFFFFF"
                   />
-
-                  <Text
-                    style={
-                      styles.primaryButtonText
-                    }
-                  >
-                    {cart[
-                      selectedMedicine.id
-                    ]
-                      ? "Update Cart"
-                      : "Add to Cart"}
+                  <Text style={styles.primaryButtonText}>
+                    {cart[selectedProduct.id] ? "Update Cart" : "Add to Cart"}
                   </Text>
                 </Pressable>
               </>
@@ -1591,68 +828,26 @@ export default function NewRequestScreen() {
         </View>
       </Modal>
 
-      {/* =====================================================
-          CART MODAL
-      ====================================================== */}
-
+      {/* CART MODAL */}
       <Modal
         visible={cartModal}
         transparent
         animationType="slide"
-        onRequestClose={() =>
-          setCartModal(false)
-        }
+        onRequestClose={() => setCartModal(false)}
       >
-        <View
-          style={
-            styles.modalOverlay
-          }
-        >
-          <View
-            style={[
-              styles.bottomSheet,
+        <View style={styles.modalOverlay}>
+          <View style={[styles.bottomSheet, styles.cartSheet]}>
+            <View style={styles.modalHandle} />
 
-              styles.cartSheet,
-            ]}
-          >
-            <View
-              style={
-                styles.modalHandle
-              }
-            />
-
-            {/* CART HEADER */}
-
-            <View
-              style={
-                styles.cartHeader
-              }
-            >
+            <View style={styles.cartHeader}>
               <View>
-                <Text
-                  style={
-                    styles.modalTitle
-                  }
-                >
-                  Your Request
-                </Text>
-
-                <Text
-                  style={
-                    styles.modalSubtitle
-                  }
-                >
-                  {
-                    selectedStockist?.name
-                  }
+                <Text style={styles.modalTitle}>Your Request</Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedStockist?.name}
                 </Text>
               </View>
 
-              <Pressable
-                onPress={() =>
-                  setCartModal(false)
-                }
-              >
+              <Pressable onPress={() => setCartModal(false)}>
                 <MaterialCommunityIcons
                   name="close"
                   size={25}
@@ -1661,285 +856,101 @@ export default function NewRequestScreen() {
               </Pressable>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={
-                false
-              }
-            >
-              {/* CART ITEMS */}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {selectedMedicines.map((product) => {
+                const itemState = cart[product.id];
+                const price = parseFloat(product.price) || 0;
 
-              {selectedMedicines.map(
-                (medicine) => {
-                  const itemQuantity =
-                    cart[
-                      medicine.id
-                    ] ?? 0;
-
-                  return (
-                    <View
-                      key={
-                        medicine.id
-                      }
-                      style={
-                        styles.cartItem
-                      }
-                    >
-                      <View
-                        style={
-                          styles.cartItemInfo
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.cartMedicineName
-                          }
-                        >
-                          {
-                            medicine.name
-                          }
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.resultMeta
-                          }
-                        >
-                          {
-                            medicine.company
-                          }
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.cartPriceText
-                          }
-                        >
-                          Rs.{" "}
-                          {
-                            medicine.price
-                          }{" "}
-                          each
-                        </Text>
-                      </View>
-
-                      {/* CART QUANTITY */}
-
-                      <View
-                        style={
-                          styles.cartQuantity
-                        }
-                      >
-                        <Pressable
-                          onPress={() =>
-                            changeCartQuantity(
-                              medicine,
-
-                              -1
-                            )
-                          }
-                        >
-                          <MaterialCommunityIcons
-                            name="minus-circle-outline"
-                            size={24}
-                            color={
-                              colors.primary
-                            }
-                          />
-                        </Pressable>
-
-                        <Text
-                          style={
-                            styles.cartQuantityText
-                          }
-                        >
-                          {
-                            itemQuantity
-                          }
-                        </Text>
-
-                        <Pressable
-                          onPress={() =>
-                            changeCartQuantity(
-                              medicine,
-
-                              1
-                            )
-                          }
-                        >
-                          <MaterialCommunityIcons
-                            name="plus-circle-outline"
-                            size={24}
-                            color={
-                              colors.primary
-                            }
-                          />
-                        </Pressable>
-                      </View>
-
-                      {/* AMOUNT */}
-
-                      <Text
-                        style={
-                          styles.cartItemAmount
-                        }
-                      >
-                        Rs.{" "}
-                        {(
-                          itemQuantity *
-                          medicine.price
-                        ).toFixed(2)}
+                return (
+                  <View key={product.id} style={styles.cartItem}>
+                    <View style={styles.cartItemInfo}>
+                      <Text style={styles.cartMedicineName}>{product.name}</Text>
+                      <Text style={styles.resultMeta}>
+                        {product.unit}
+                        {itemState.bonus > 0 ? ` • +${itemState.bonus} free bonus` : ""}
                       </Text>
+                      <Text style={styles.cartPriceText}>
+                        Rs. {price.toFixed(2)} each
+                      </Text>
+                    </View>
 
-                      {/* DELETE */}
-
-                      <Pressable
-                        onPress={() =>
-                          removeFromCart(
-                            medicine.id
-                          )
-                        }
-                      >
+                    <View style={styles.cartQuantity}>
+                      <Pressable onPress={() => changeCartQuantity(product, -1)}>
                         <MaterialCommunityIcons
-                          name="delete-outline"
-                          size={22}
-                          color={
-                            colors.danger
-                          }
+                          name="minus-circle-outline"
+                          size={24}
+                          color={colors.primary}
+                        />
+                      </Pressable>
+                      <Text style={styles.cartQuantityText}>
+                        {itemState.quantity}
+                      </Text>
+                      <Pressable onPress={() => changeCartQuantity(product, 1)}>
+                        <MaterialCommunityIcons
+                          name="plus-circle-outline"
+                          size={24}
+                          color={colors.primary}
                         />
                       </Pressable>
                     </View>
-                  );
-                }
-              )}
 
-              {/* CART TOTALS */}
+                    <Text style={styles.cartItemAmount}>
+                      Rs. {(itemState.quantity * price).toFixed(2)}
+                    </Text>
 
-              <View
-                style={
-                  styles.cartTotals
-                }
-              >
-                <View
-                  style={
-                    styles.totalLine
-                  }
-                >
-                  <Text
-                    style={
-                      styles.totalLabel
-                    }
-                  >
-                    Medicines
-                  </Text>
+                    <Pressable onPress={() => removeFromCart(product.id)}>
+                      <MaterialCommunityIcons
+                        name="delete-outline"
+                        size={22}
+                        color={colors.danger}
+                      />
+                    </Pressable>
+                  </View>
+                );
+              })}
 
-                  <Text
-                    style={
-                      styles.totalText
-                    }
-                  >
-                    {medicineCount}
-                  </Text>
+              {/* TOTALS */}
+              <View style={styles.cartTotals}>
+                <View style={styles.totalLine}>
+                  <Text style={styles.totalLabel}>Line Items</Text>
+                  <Text style={styles.totalText}>{medicineCount}</Text>
                 </View>
 
-                <View
-                  style={
-                    styles.totalLine
-                  }
-                >
-                  <Text
-                    style={
-                      styles.totalLabel
-                    }
-                  >
-                    Total Units
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.totalText
-                    }
-                  >
-                    {totalQuantity}
-                  </Text>
+                <View style={styles.totalLine}>
+                  <Text style={styles.totalLabel}>Total Units (incl. bonus)</Text>
+                  <Text style={styles.totalText}>{totalQuantity}</Text>
                 </View>
 
-                <View
-                  style={[
-                    styles.totalLine,
-
-                    styles.finalTotal,
-                  ]}
-                >
-                  <Text
-                    style={
-                      styles.finalTotalLabel
-                    }
-                  >
-                    Total Amount
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.finalTotalValue
-                    }
-                  >
-                    Rs.{" "}
-                    {totalAmount.toFixed(
-                      2
-                    )}
+                <View style={[styles.totalLine, styles.finalTotal]}>
+                  <Text style={styles.finalTotalLabel}>Grand Total</Text>
+                  <Text style={styles.finalTotalValue}>
+                    Rs. {totalAmount.toFixed(2)}
                   </Text>
                 </View>
               </View>
 
-              {/* NOTE */}
-
-              <Text
-                style={
-                  styles.noteLabel
-                }
-              >
-                Additional Note
-              </Text>
-
-              <TextInput
-                value={note}
-                onChangeText={setNote}
-                placeholder="Optional instructions..."
-                placeholderTextColor={
-                  colors.textMuted
-                }
-                multiline
-                textAlignVertical="top"
-                style={
-                  styles.noteInput
-                }
-              />
-
-              {/* SUBMIT */}
-
+              {/* SUBMIT BUTTON */}
               <Pressable
                 style={[
                   styles.primaryButton,
-
                   styles.submitButton,
+                  isSubmitting && { opacity: 0.7 },
                 ]}
-                onPress={
-                  handleSubmit
-                }
+                onPress={handleSubmit}
+                disabled={isSubmitting}
               >
-                <MaterialCommunityIcons
-                  name="send-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-
-                <Text
-                  style={
-                    styles.primaryButtonText
-                  }
-                >
-                  Submit Request
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="send-outline"
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.primaryButtonText}>Submit Order</Text>
+                  </>
+                )}
               </Pressable>
             </ScrollView>
           </View>
@@ -1949,1009 +960,580 @@ export default function NewRequestScreen() {
   );
 }
 
-// ============================================================
-// STYLES
-// ============================================================
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-
-    backgroundColor:
-      colors.background,
+    backgroundColor: colors.background,
   },
-
   scrollContent: {
     paddingTop: 12,
-
-    // Space for floating cart
     paddingBottom: 150,
   },
-
   container: {
     flex: 1,
   },
-
-  // =========================================================
-  // HEADER
-  // =========================================================
-
   header: {
     marginBottom: 26,
   },
-
   title: {
-    fontSize: 28,
-
-    fontWeight: "700",
-
+    fontSize: 26,
+    fontWeight: "600",
     color: colors.text,
   },
-
   subtitle: {
     marginTop: 6,
-
     fontSize: 13,
-
     lineHeight: 19,
-
-    color:
-      colors.textSecondary,
+    color: colors.textSecondary,
+    fontWeight: "400",
   },
-
-  // =========================================================
-  // STEPS
-  // =========================================================
-
   stepHeader: {
     flexDirection: "row",
-
     alignItems: "center",
-
-    marginBottom: 12,
-  },
-
-  medicineStep: {
-    marginTop: 30,
-  },
-
-  stepNumber: {
-    width: 29,
-
-    height: 29,
-
-    borderRadius: 15,
-
-    backgroundColor:
-      colors.primary,
-
-    justifyContent: "center",
-
-    alignItems: "center",
-
-    marginRight: 9,
-  },
-
-  stepNumberText: {
-    fontSize: 12,
-
-    fontWeight: "700",
-
-    color: "#FFFFFF",
-  },
-
-  stepTitle: {
-    fontSize: 17,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  // =========================================================
-  // SEARCH
-  // =========================================================
-
-  searchContainer: {
-    minHeight: 52,
-
-    paddingHorizontal: 14,
-
-    borderRadius: 14,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    backgroundColor:
-      colors.card,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-  },
-
-  searchInput: {
-    flex: 1,
-
-    marginLeft: 8,
-
-    marginRight: 8,
-
-    fontSize: 14,
-
-    color: colors.text,
-  },
-
-  // =========================================================
-  // STOCKIST
-  // =========================================================
-
-  resultCard: {
-    marginTop: 8,
-
-    padding: 13,
-
-    backgroundColor:
-      colors.card,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    borderRadius: 14,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-  },
-
-  selectedStockistCard: {
-    padding: 15,
-
-    backgroundColor:
-      colors.primarySoft,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.primary,
-
-    borderRadius: 16,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-  },
-
-  resultIcon: {
-    width: 43,
-
-    height: 43,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      colors.primarySoft,
-
-    alignItems: "center",
-
-    justifyContent: "center",
-  },
-
-  resultInfo: {
-    flex: 1,
-
-    marginLeft: 11,
-  },
-
-  resultName: {
-    fontSize: 14,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  resultMeta: {
-    marginTop: 3,
-
-    fontSize: 11,
-
-    color:
-      colors.textSecondary,
-  },
-
-  contactText: {
-    marginTop: 3,
-
-    fontSize: 10,
-
-    color:
-      colors.textMuted,
-  },
-
-  selectedLabel: {
-    marginBottom: 3,
-
-    fontSize: 8,
-
-    fontWeight: "700",
-
-    letterSpacing: 0.7,
-
-    color:
-      colors.textSecondary,
-  },
-
-  changeText: {
-    fontSize: 12,
-
-    fontWeight: "700",
-
-    color:
-      colors.primary,
-  },
-
-  // =========================================================
-  // MEDICINE
-  // =========================================================
-
-  medicineListHeader: {
-    marginTop: 19,
-
-    marginBottom: 3,
-
-    flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-
-    alignItems: "center",
-  },
-
-  medicineListTitle: {
-    fontSize: 14,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  medicineCount: {
-    fontSize: 11,
-
-    fontWeight: "600",
-
-    color:
-      colors.textSecondary,
-  },
-
-  medicineResult: {
-    marginTop: 9,
-
-    padding: 13,
-
-    borderRadius: 15,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    backgroundColor:
-      colors.card,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-  },
-
-  medicineDisabled: {
-    opacity: 0.55,
-  },
-
-  medicineIcon: {
-    width: 44,
-
-    height: 44,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      colors.primarySoft,
-
-    alignItems: "center",
-
-    justifyContent: "center",
-  },
-
-  medicineMetaRow: {
-    marginTop: 7,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-
+    marginBottom: 14,
     gap: 10,
   },
-
-  price: {
-    fontSize: 11,
-
-    fontWeight: "700",
-
-    color: colors.text,
+  medicineStep: {
+    marginTop: 28,
   },
-
-  stock: {
-    fontSize: 10,
-
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepNumberText: {
+    color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "600",
   },
-
+  stepTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  searchContainer: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    marginRight: 8,
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: "400",
+  },
+  resultCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  resultIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  resultInfo: {
+    flex: 1,
+  },
+  resultName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  resultMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontWeight: "400",
+  },
+  selectedStockistCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  selectedLabel: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  changeText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "500",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  medicineListHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  medicineListTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  medicineCount: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.textMuted,
+  },
+  medicineResult: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  medicineDisabled: {
+    opacity: 0.5,
+  },
+  disabledText: {
+    color: colors.textMuted,
+  },
+  medicineIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  medicineMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+  },
+  price: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  stock: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
   inStock: {
     color: colors.success,
   },
-
   lowStock: {
     color: colors.warning,
   },
-
   outOfStock: {
     color: colors.danger,
   },
-
-  disabledText: {
-    color:
-      colors.textSecondary,
-  },
-
   addedBadge: {
-    paddingHorizontal: 9,
-
-    paddingVertical: 6,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      colors.successSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: colors.successSoft,
   },
-
   addedText: {
-    fontSize: 10,
-
-    fontWeight: "700",
-
+    fontSize: 11,
+    fontWeight: "600",
     color: colors.success,
   },
-
-  // =========================================================
-  // EMPTY STATES
-  // =========================================================
-
   noResult: {
-    paddingVertical: 45,
-
+    padding: 30,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginVertical: 10,
   },
-
   noResultTitle: {
     marginTop: 10,
-
     fontSize: 15,
-
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.text,
   },
-
   noResultText: {
     marginTop: 4,
-
-    maxWidth: 260,
-
-    textAlign: "center",
-
-    fontSize: 11,
-
-    lineHeight: 17,
-
-    color:
-      colors.textSecondary,
-  },
-
-  addStockistButton: {
-    marginTop: 16,
-
-    paddingHorizontal: 15,
-
-    paddingVertical: 10,
-
-    borderRadius: 12,
-
-    backgroundColor:
-      colors.primarySoft,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-
-    gap: 6,
-  },
-
-  addStockistText: {
     fontSize: 12,
-
-    fontWeight: "700",
-
-    color:
-      colors.primary,
+    color: colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "400",
   },
-
-  // =========================================================
-  // CART BAR
-  // =========================================================
-
+  addStockistButton: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+  },
+  addStockistText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "500",
+  },
   cartBar: {
     position: "absolute",
-
     left: 0,
-
     right: 0,
-
     bottom: 88,
-
-    minHeight: 68,
-
-    paddingHorizontal: 15,
-
-    borderRadius: 18,
-
-    backgroundColor:
-      colors.primary,
-
+    minHeight: 64,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
     flexDirection: "row",
-
     alignItems: "center",
-
-    shadowColor: "#000",
-
-    shadowOffset: {
-      width: 0,
-
-      height: 5,
-    },
-
-    shadowOpacity: 0.18,
-
-    shadowRadius: 10,
-
-    elevation: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryDark,
   },
-
   cartIcon: {
     position: "relative",
   },
-
   cartCountBadge: {
     position: "absolute",
-
-    top: -9,
-
-    right: -10,
-
+    top: -6,
+    right: -8,
     minWidth: 18,
-
     height: 18,
-
-    paddingHorizontal: 4,
-
     borderRadius: 9,
-
-    backgroundColor:
-      "#FFFFFF",
-
+    backgroundColor: colors.danger,
     alignItems: "center",
-
     justifyContent: "center",
+    paddingHorizontal: 4,
   },
-
   cartCountText: {
-    fontSize: 9,
-
-    fontWeight: "800",
-
-    color:
-      colors.primary,
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "600",
   },
-
   cartInfo: {
     flex: 1,
-
-    marginLeft: 15,
+    marginLeft: 16,
   },
-
   cartTitle: {
-    fontSize: 13,
-
-    fontWeight: "700",
-
     color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
-
   cartUnits: {
-    marginTop: 2,
-
-    fontSize: 10,
-
-    color: "#DCE8FF",
+    color: "#E2E8F0",
+    fontSize: 11,
+    fontWeight: "400",
   },
-
   cartAmountArea: {
     alignItems: "flex-end",
   },
-
   cartAmount: {
-    fontSize: 14,
-
-    fontWeight: "800",
-
     color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
-
   viewCartText: {
-    marginTop: 2,
-
-    fontSize: 10,
-
-    color: "#DCE8FF",
+    color: "#E2E8F0",
+    fontSize: 11,
+    fontWeight: "500",
   },
-
-  // =========================================================
-  // MODAL
-  // =========================================================
-
   modalOverlay: {
     flex: 1,
-
-    backgroundColor:
-      "rgba(15,23,42,0.45)",
-
-    justifyContent:
-      "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
   },
-
   bottomSheet: {
-    backgroundColor:
-      colors.card,
-
-    borderTopLeftRadius: 26,
-
-    borderTopRightRadius: 26,
-
-    padding: 22,
-
-    paddingBottom: 32,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-
   cartSheet: {
-    maxHeight: "88%",
+    maxHeight: "85%",
   },
-
   modalHandle: {
-    width: 45,
-
-    height: 5,
-
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
     alignSelf: "center",
-
-    marginBottom: 20,
-
-    borderRadius: 4,
-
-    backgroundColor:
-      colors.border,
+    marginBottom: 16,
   },
-
   modalMedicineHeader: {
     flexDirection: "row",
-
     alignItems: "center",
-  },
-
-  largeMedicineIcon: {
-    width: 50,
-
-    height: 50,
-
-    borderRadius: 15,
-
-    backgroundColor:
-      colors.primarySoft,
-
-    alignItems: "center",
-
-    justifyContent: "center",
-  },
-
-  modalMedicineInfo: {
-    flex: 1,
-
-    marginLeft: 12,
-
-    marginRight: 10,
-  },
-
-  modalTitle: {
-    fontSize: 20,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  modalSubtitle: {
-    marginTop: 4,
-
-    fontSize: 11,
-
-    color:
-      colors.textSecondary,
-  },
-
-  productInfoRow: {
-    marginTop: 22,
-
-    flexDirection: "row",
-
-    gap: 10,
-  },
-
-  productInfoBox: {
-    flex: 1,
-
-    padding: 15,
-
-    borderRadius: 14,
-
-    backgroundColor:
-      colors.background,
-  },
-
-  smallLabel: {
-    fontSize: 9,
-
-    fontWeight: "700",
-
-    color:
-      colors.textSecondary,
-  },
-
-  productInfoValue: {
-    marginTop: 4,
-
-    fontSize: 15,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  // =========================================================
-  // QUANTITY
-  // =========================================================
-
-  quantityLabel: {
-    marginTop: 22,
-
-    marginBottom: 10,
-
-    fontSize: 13,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  quantityPicker: {
-    flexDirection: "row",
-
-    alignItems: "center",
-
-    justifyContent: "center",
-
-    gap: 22,
-  },
-
-  quantityButton: {
-    width: 46,
-
-    height: 46,
-
-    borderRadius: 14,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    alignItems: "center",
-
-    justifyContent: "center",
-  },
-
-  quantityInput: {
-    minWidth: 80,
-
-    height: 52,
-
-    textAlign: "center",
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    borderRadius: 14,
-
-    fontSize: 18,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  // =========================================================
-  // TOTAL
-  // =========================================================
-
-  modalTotal: {
-    marginTop: 24,
-
-    paddingTop: 16,
-
-    borderTopWidth: 1,
-
-    borderTopColor:
-      colors.border,
-
-    flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-  },
-
-  totalLabel: {
-    fontSize: 12,
-
-    color:
-      colors.textSecondary,
-  },
-
-  totalValue: {
-    fontSize: 18,
-
-    fontWeight: "800",
-
-    color:
-      colors.primary,
-  },
-
-  // =========================================================
-  // BUTTON
-  // =========================================================
-
-  primaryButton: {
-    minHeight: 54,
-
-    marginTop: 22,
-
-    borderRadius: 14,
-
-    backgroundColor:
-      colors.primary,
-
-    flexDirection: "row",
-
-    alignItems: "center",
-
-    justifyContent: "center",
-
-    gap: 7,
-  },
-
-  primaryButtonText: {
-    fontSize: 14,
-
-    fontWeight: "700",
-
-    color: "#FFFFFF",
-  },
-
-  // =========================================================
-  // CART MODAL
-  // =========================================================
-
-  cartHeader: {
-    flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-
-    alignItems: "flex-start",
-
     marginBottom: 18,
   },
-
-  cartItem: {
-    paddingVertical: 14,
-
-    borderBottomWidth: 1,
-
-    borderBottomColor:
-      colors.border,
-
-    flexDirection: "row",
-
+  largeMedicineIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
-
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  modalMedicineInfo: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontWeight: "400",
+  },
+  productInfoRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 18,
+  },
+  productInfoBox: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: "#FAFBFD",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  smallLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
+  productInfoValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    marginTop: 4,
+  },
+  quantityLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+    marginBottom: 10,
+  },
+  quantityPicker: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    paddingVertical: 8,
+  },
+  quantityButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quantityInput: {
+    minWidth: 80,
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "600",
+    color: colors.text,
+    paddingVertical: 4,
+  },
+  bonusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#FAFBFD",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bonusLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+  },
+  bonusSubtext: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
+  bonusPicker: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-
+  bonusButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
+  },
+  bonusText: {
+    fontSize: 15,
+    fontWeight: "600",
+    minWidth: 20,
+    textAlign: "center",
+    color: colors.text,
+  },
+  modalTotal: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 18,
+    marginBottom: 18,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
+  totalValue: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  primaryButton: {
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  cartHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  cartItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 10,
+  },
   cartItemInfo: {
     flex: 1,
   },
-
   cartMedicineName: {
-    fontSize: 13,
-
-    fontWeight: "700",
-
+    fontSize: 14,
+    fontWeight: "600",
     color: colors.text,
   },
-
   cartPriceText: {
-    marginTop: 3,
-
-    fontSize: 10,
-
-    color:
-      colors.textMuted,
+    marginTop: 2,
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "400",
   },
-
   cartQuantity: {
     flexDirection: "row",
-
     alignItems: "center",
-
-    gap: 7,
+    gap: 6,
   },
-
   cartQuantityText: {
     minWidth: 20,
-
     textAlign: "center",
-
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.text,
   },
-
   cartItemAmount: {
-    minWidth: 75,
-
+    minWidth: 70,
     textAlign: "right",
-
-    fontSize: 11,
-
-    fontWeight: "700",
-
+    fontSize: 12,
+    fontWeight: "600",
     color: colors.text,
   },
-
   cartTotals: {
     marginTop: 18,
-
-    padding: 15,
-
+    padding: 16,
     borderRadius: 14,
-
-    backgroundColor:
-      colors.background,
+    backgroundColor: "#FAFBFD",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-
   totalLine: {
     flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-
-    marginBottom: 9,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-
   totalText: {
-    fontSize: 12,
-
-    fontWeight: "700",
-
+    fontSize: 13,
+    fontWeight: "600",
     color: colors.text,
   },
-
   finalTotal: {
-    marginTop: 7,
-
-    paddingTop: 13,
-
+    marginTop: 8,
+    paddingTop: 12,
     borderTopWidth: 1,
-
-    borderTopColor:
-      colors.border,
+    borderTopColor: colors.border,
+    marginBottom: 0,
   },
-
   finalTotalLabel: {
-    fontSize: 14,
-
-    fontWeight: "700",
-
+    fontSize: 15,
+    fontWeight: "600",
     color: colors.text,
   },
-
   finalTotalValue: {
     fontSize: 18,
-
-    fontWeight: "800",
-
-    color:
-      colors.primary,
-  },
-
-  // =========================================================
-  // NOTE
-  // =========================================================
-
-  noteLabel: {
-    marginTop: 20,
-
-    marginBottom: 8,
-
-    fontSize: 12,
-
     fontWeight: "700",
-
-    color: colors.text,
+    color: colors.primary,
   },
-
-  noteInput: {
-    minHeight: 90,
-
-    padding: 12,
-
-    borderRadius: 13,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    backgroundColor:
-      colors.background,
-
-    fontSize: 13,
-
-    color: colors.text,
-  },
-
   submitButton: {
+    marginTop: 20,
     marginBottom: 20,
   },
-
-  // =========================================================
-  // PRESS
-  // =========================================================
-
   cardPressed: {
     opacity: 0.75,
   },

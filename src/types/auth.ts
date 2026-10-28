@@ -1,63 +1,45 @@
-export type UserRole =
-  | "superadmin"
-  | "MR"
-  | "MR-head";
+export type UserRole = "superadmin" | "MR" | "MR-head";
 
-export type AuthMethod =
-  | "password"
-  | "google";
+export type AuthMethod = "password" | "google";
 
-export type AuthUser = {
+export interface AuthUser {
   id: string;
-
   name: string;
-
   email: string;
-
-  emailVerified?: boolean;
-
+  emailVerified: boolean;
   image?: string | null;
-
   role: UserRole;
-
   branchId?: string | null;
-
   phoneNumber?: string | null;
-
   authMethod?: AuthMethod;
-
-  banned?: boolean;
-
+  banned?: boolean | null;
   banReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
-  banExpires?: string | null;
-
-  createdAt?: string;
-
-  updatedAt?: string;
-};
-
-export type LoginRequest = {
+export interface LoginRequest {
   email: string;
   password: string;
-};
+}
 
-export type LoginResponse = {
+export interface LoginResponse {
   redirect: boolean;
-
-  /**
-   * Better Auth session token.
-   * We persist this securely and send
-   * it as the session cookie later.
-   */
   token: string;
-
   url?: string | null;
-
   user: AuthUser;
-};
+}
 
-export type SessionResponse = {
-  session: unknown;
+export interface SessionResponse {
+  session: {
+    id: string;
+    userId: string;
+    token: string;
+    expiresAt: string;
+    createdAt?: string;
+    updatedAt?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  };
   user: AuthUser;
-};
+}

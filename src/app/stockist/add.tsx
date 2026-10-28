@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useStockists } from "../../context/StockistContext";
 
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -21,61 +22,50 @@ import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
 export default function AddStockistScreen() {
-  const { addStockistRequest } = useStockists();
+  const { addStockist } = useStockists();
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
   const [stockistName, setStockistName] = useState("");
+  const [area, setArea] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [area, setArea] = useState("");
-  const [address, setAddress] = useState("");
-  const [notes, setNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-const handleSubmit = () => {
-  if (
-    !stockistName.trim() ||
-    !contactPerson.trim() ||
-    !phone.trim() ||
-    !address.trim()
-  ) {
-    Alert.alert(
-      "Missing information",
-      "Please complete all required fields."
-    );
+  const handleSubmit = async () => {
+    const cleanName = stockistName.trim();
+    const cleanLocation = area.trim();
 
-    return;
-  }
+    if (!cleanName || !cleanLocation) {
+      Alert.alert(
+        "Missing information",
+        "Please provide a stockist name and location / area."
+      );
+      return;
+    }
 
-  addStockistRequest({
-    name: stockistName.trim(),
+    try {
+      setIsSubmitting(true);
+      await addStockist({
+        name: cleanName,
+        location: cleanLocation,
+      });
 
-    contactPerson: contactPerson.trim(),
-
-    phone: phone.trim(),
-
-    email: email.trim() || undefined,
-
-    location:
-      area.trim() || "Location not provided",
-
-    address: address.trim(),
-
-    notes: notes.trim() || undefined,
-  });
-
-  Alert.alert(
-    "Request Submitted",
-    `${stockistName} has been sent to Admin for approval.`,
-    [
-      {
-        text: "View Request",
-        onPress: () =>
-          router.replace("/(tabs)/stockists"),
-      },
-    ]
-  );
-};
+      Alert.alert(
+        "Stockist Created",
+        `${cleanName} has been added to your territory.`,
+        [
+          {
+            text: "View Stockists",
+            onPress: () => router.replace("/(tabs)/stockists"),
+          },
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert("Creation Failed", err?.message || "Failed to add stockist.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -88,9 +78,7 @@ const handleSubmit = () => {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.scrollContent,
-            {
-              paddingHorizontal: gutter,
-            },
+            { paddingHorizontal: gutter },
           ]}
         >
           <View
@@ -106,7 +94,6 @@ const handleSubmit = () => {
             ]}
           >
             {/* Header */}
-
             <View style={styles.header}>
               <Pressable
                 style={styles.backButton}
@@ -120,18 +107,14 @@ const handleSubmit = () => {
               </Pressable>
 
               <View style={styles.headerText}>
-                <Text style={styles.title}>
-                  Add New Stockist
-                </Text>
-
+                <Text style={styles.title}>Add New Stockist</Text>
                 <Text style={styles.subtitle}>
-                  Submit a new stockist for admin approval.
+                  Register a pharmacy or stockist in your territory.
                 </Text>
               </View>
             </View>
 
             {/* Information Banner */}
-
             <View style={styles.infoBanner}>
               <View style={styles.infoIcon}>
                 <MaterialCommunityIcons
@@ -142,21 +125,16 @@ const handleSubmit = () => {
               </View>
 
               <Text style={styles.infoText}>
-                The stockist will not become active immediately.
-                After Admin approves the request, it will be
-                registered and automatically assigned to you.
+                Stockists added here become immediately active in your territory,
+                allowing you to create medicine requests right away.
               </Text>
             </View>
 
             {/* Form */}
-
             <View style={styles.formCard}>
-              <Text style={styles.sectionTitle}>
-                Stockist Information
-              </Text>
-
+              <Text style={styles.sectionTitle}>Stockist Information</Text>
               <Text style={styles.sectionDescription}>
-                Enter the business and contact information below.
+                Enter the business and location details below.
               </Text>
 
               <View
@@ -166,7 +144,6 @@ const handleSubmit = () => {
                 ]}
               >
                 {/* Stockist name */}
-
                 <View
                   style={[
                     styles.fieldGroup,
@@ -174,7 +151,7 @@ const handleSubmit = () => {
                   ]}
                 >
                   <Text style={styles.label}>
-                    Stockist Name
+                    Stockist / Pharmacy Name
                     <Text style={styles.required}> *</Text>
                   </Text>
 
@@ -184,79 +161,11 @@ const handleSubmit = () => {
                     placeholder="e.g. Sunrise Pharmacy"
                     placeholderTextColor={colors.textMuted}
                     style={styles.input}
+                    editable={!isSubmitting}
                   />
                 </View>
 
-                {/* Contact person */}
-
-                <View
-                  style={[
-                    styles.fieldGroup,
-                    isTablet && styles.halfField,
-                  ]}
-                >
-                  <Text style={styles.label}>
-                    Contact Person
-                    <Text style={styles.required}> *</Text>
-                  </Text>
-
-                  <TextInput
-                    value={contactPerson}
-                    onChangeText={setContactPerson}
-                    placeholder="Enter contact person's name"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                  />
-                </View>
-
-                {/* Phone */}
-
-                <View
-                  style={[
-                    styles.fieldGroup,
-                    isTablet && styles.halfField,
-                  ]}
-                >
-                  <Text style={styles.label}>
-                    Phone Number
-                    <Text style={styles.required}> *</Text>
-                  </Text>
-
-                  <TextInput
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="98XXXXXXXX"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-
-                {/* Email */}
-
-                <View
-                  style={[
-                    styles.fieldGroup,
-                    isTablet && styles.halfField,
-                  ]}
-                >
-                  <Text style={styles.label}>
-                    Email
-                  </Text>
-
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="example@email.com"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-
-                {/* Area */}
-
+                {/* Location / Area */}
                 <View
                   style={[
                     styles.fieldGroup,
@@ -265,73 +174,64 @@ const handleSubmit = () => {
                 >
                   <Text style={styles.label}>
                     Area / Location
+                    <Text style={styles.required}> *</Text>
                   </Text>
 
                   <TextInput
                     value={area}
                     onChangeText={setArea}
-                    placeholder="e.g. Kathmandu"
+                    placeholder="e.g. Bagbazar, Kathmandu"
                     placeholderTextColor={colors.textMuted}
                     style={styles.input}
+                    editable={!isSubmitting}
                   />
                 </View>
 
-                {/* Address */}
-
+                {/* Contact person (Optional) */}
                 <View
                   style={[
                     styles.fieldGroup,
                     isTablet && styles.halfField,
                   ]}
                 >
-                  <Text style={styles.label}>
-                    Address
-                    <Text style={styles.required}> *</Text>
-                  </Text>
+                  <Text style={styles.label}>Contact Person</Text>
 
                   <TextInput
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholder="Enter full address"
+                    value={contactPerson}
+                    onChangeText={setContactPerson}
+                    placeholder="e.g. Ram Sharma (optional)"
                     placeholderTextColor={colors.textMuted}
                     style={styles.input}
+                    editable={!isSubmitting}
+                  />
+                </View>
+
+                {/* Phone (Optional) */}
+                <View
+                  style={[
+                    styles.fieldGroup,
+                    isTablet && styles.halfField,
+                  ]}
+                >
+                  <Text style={styles.label}>Phone Number</Text>
+
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="98XXXXXXXX (optional)"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                    editable={!isSubmitting}
                   />
                 </View>
               </View>
-
-              {/* Notes */}
-
-              <View style={styles.notesGroup}>
-                <Text style={styles.label}>
-                  Notes
-                </Text>
-
-                <TextInput
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Additional information about the stockist..."
-                  placeholderTextColor={colors.textMuted}
-                  style={[
-                    styles.input,
-                    styles.notesInput,
-                  ]}
-                  multiline
-                  textAlignVertical="top"
-                />
-
-                <Text style={styles.optionalText}>
-                  Optional
-                </Text>
-              </View>
             </View>
 
-            {/* Preview */}
-
+            {/* Preview Card */}
             {stockistName.trim().length > 0 && (
               <View style={styles.previewCard}>
-                <Text style={styles.previewLabel}>
-                  REQUEST PREVIEW
-                </Text>
+                <Text style={styles.previewLabel}>STOCKIST PREVIEW</Text>
 
                 <View style={styles.previewContent}>
                   <View style={styles.stockistIcon}>
@@ -343,26 +243,20 @@ const handleSubmit = () => {
                   </View>
 
                   <View style={styles.previewInfo}>
-                    <Text style={styles.previewName}>
-                      {stockistName}
-                    </Text>
-
+                    <Text style={styles.previewName}>{stockistName}</Text>
                     <Text style={styles.previewLocation}>
                       {area || "Location not provided"}
                     </Text>
                   </View>
 
-                  <View style={styles.pendingBadge}>
-                    <Text style={styles.pendingText}>
-                      Pending Approval
-                    </Text>
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeText}>Active</Text>
                   </View>
                 </View>
               </View>
             )}
 
-            {/* Buttons */}
-
+            {/* Actions */}
             <View
               style={[
                 styles.actions,
@@ -372,25 +266,28 @@ const handleSubmit = () => {
               <Pressable
                 style={styles.cancelButton}
                 onPress={() => router.back()}
+                disabled={isSubmitting}
               >
-                <Text style={styles.cancelText}>
-                  Cancel
-                </Text>
+                <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
 
               <Pressable
-                style={styles.submitButton}
+                style={[styles.submitButton, isSubmitting && { opacity: 0.7 }]}
                 onPress={handleSubmit}
+                disabled={isSubmitting}
               >
-                <MaterialCommunityIcons
-                  name="send-outline"
-                  size={19}
-                  color="#FFFFFF"
-                />
-
-                <Text style={styles.submitText}>
-                  Submit for Approval
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="plus"
+                      size={19}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.submitText}>Save Stockist</Text>
+                  </>
+                )}
               </Pressable>
             </View>
           </View>
@@ -405,320 +302,213 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   keyboardContainer: {
     flex: 1,
   },
-
   scrollContent: {
     paddingTop: 8,
     paddingBottom: 50,
   },
-
   container: {
     flex: 1,
   },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 22,
   },
-
   backButton: {
     width: 44,
     height: 44,
-
     borderRadius: 14,
-
     backgroundColor: colors.card,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     alignItems: "center",
     justifyContent: "center",
-
     marginRight: 13,
   },
-
   headerText: {
     flex: 1,
   },
-
   title: {
-    fontSize: 25,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "600",
     color: colors.text,
   },
-
   subtitle: {
     marginTop: 4,
     fontSize: 13,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   infoBanner: {
     backgroundColor: colors.primarySoft,
-
     borderRadius: 16,
-
     padding: 14,
-
     flexDirection: "row",
     alignItems: "flex-start",
-
     marginBottom: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-
   infoIcon: {
     width: 36,
     height: 36,
-
     borderRadius: 11,
-
     backgroundColor: "#FFFFFF",
-
     alignItems: "center",
     justifyContent: "center",
-
     marginRight: 11,
   },
-
   infoText: {
     flex: 1,
-
     color: colors.textSecondary,
-
     fontSize: 12,
     lineHeight: 18,
+    fontWeight: "400",
   },
-
   formCard: {
     backgroundColor: colors.card,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     borderRadius: 20,
-
     padding: 18,
   },
-
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: colors.text,
   },
-
   sectionDescription: {
     marginTop: 4,
-
     fontSize: 12,
     color: colors.textSecondary,
-
     marginBottom: 20,
+    fontWeight: "400",
   },
-
   formGrid: {
     gap: 16,
   },
-
   formGridTablet: {
     flexDirection: "row",
     flexWrap: "wrap",
     columnGap: 16,
   },
-
   fieldGroup: {
     width: "100%",
   },
-
   halfField: {
     width: "48.8%",
   },
-
   label: {
     marginBottom: 7,
-
     fontSize: 12,
-    fontWeight: "600",
-
+    fontWeight: "500",
     color: colors.text,
   },
-
   required: {
     color: colors.danger,
   },
-
   input: {
     minHeight: 50,
-
     paddingHorizontal: 14,
-
     borderRadius: 13,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     backgroundColor: "#FAFBFD",
-
     fontSize: 14,
     color: colors.text,
+    fontWeight: "400",
   },
-
-  notesGroup: {
-    marginTop: 18,
-  },
-
-  notesInput: {
-    minHeight: 110,
-
-    paddingTop: 13,
-    paddingBottom: 13,
-  },
-
-  optionalText: {
-    marginTop: 5,
-
-    fontSize: 10,
-    color: colors.textMuted,
-  },
-
   previewCard: {
     marginTop: 18,
-
     padding: 16,
-
     borderRadius: 18,
-
     backgroundColor: colors.card,
-
     borderWidth: 1,
     borderColor: colors.border,
   },
-
   previewLabel: {
-    marginBottom: 12,
-
-    fontSize: 10,
-    fontWeight: "700",
-
-    letterSpacing: 0.8,
-
+    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "500",
     color: colors.textSecondary,
   },
-
   previewContent: {
     flexDirection: "row",
     alignItems: "center",
   },
-
   stockistIcon: {
     width: 46,
     height: 46,
-
     borderRadius: 14,
-
     backgroundColor: colors.primarySoft,
-
     alignItems: "center",
     justifyContent: "center",
   },
-
   previewInfo: {
     flex: 1,
-
     marginLeft: 12,
   },
-
   previewName: {
     fontSize: 15,
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: colors.text,
   },
-
   previewLocation: {
-    marginTop: 3,
-
-    fontSize: 11,
-
+    marginTop: 2,
+    fontSize: 12,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
-  pendingBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-
+  activeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 15,
-
-    backgroundColor: colors.warningSoft,
+    backgroundColor: colors.successSoft,
   },
-
-  pendingText: {
-    fontSize: 9,
-    fontWeight: "700",
-
-    color: colors.warning,
+  activeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.success,
   },
-
   actions: {
     marginTop: 22,
-
     gap: 10,
   },
-
   actionsTablet: {
     flexDirection: "row",
-
     justifyContent: "flex-end",
   },
-
   cancelButton: {
-    minHeight: 52,
-
+    minHeight: 50,
     borderRadius: 14,
-
     borderWidth: 1,
     borderColor: colors.border,
-
     backgroundColor: colors.card,
-
     alignItems: "center",
     justifyContent: "center",
-
     paddingHorizontal: 25,
   },
-
   cancelText: {
     fontSize: 14,
-    fontWeight: "700",
-
+    fontWeight: "500",
     color: colors.textSecondary,
   },
-
   submitButton: {
-    minHeight: 52,
-
+    minHeight: 50,
     paddingHorizontal: 25,
-
     borderRadius: 14,
-
     backgroundColor: colors.primary,
-
     flexDirection: "row",
-
     alignItems: "center",
     justifyContent: "center",
-
     gap: 7,
   },
-
   submitText: {
     fontSize: 14,
-    fontWeight: "700",
-
+    fontWeight: "600",
     color: "#FFFFFF",
   },
 });
