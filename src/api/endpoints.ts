@@ -20,11 +20,14 @@ export const API_ENDPOINTS = {
     confirm: `${API_BASE_URL}/password-reset/confirm`,
   },
 
-  // MR Self-Registration
+  // MR Self-Registration & Approvals
   registrations: {
     requestCode: `${API_BASE_URL}/registrations/request-code`,
     create: `${API_BASE_URL}/registrations`,
     passwordSetup: `${API_BASE_URL}/registrations/password-setup`,
+    list: `${API_BASE_URL}/registrations`,
+    approve: (id: string) => `${API_BASE_URL}/registrations/${id}/approve`,
+    reject: (id: string) => `${API_BASE_URL}/registrations/${id}/reject`,
   },
 
   // Dashboard
@@ -43,12 +46,15 @@ export const API_ENDPOINTS = {
   products: {
     list: `${API_BASE_URL}/products`,
     search: `${API_BASE_URL}/products`,
+    create: `${API_BASE_URL}/products`,
+    image: `${API_BASE_URL}/products/image`,
   },
 
   // Stockists
   stockists: {
     list: `${API_BASE_URL}/stockists`,
     create: `${API_BASE_URL}/stockists`,
+    details: (id: string) => `${API_BASE_URL}/stockists/${id}`,
   },
 
   // Orders / Medicine Requests
@@ -56,6 +62,15 @@ export const API_ENDPOINTS = {
     list: `${API_BASE_URL}/orders`,
     create: `${API_BASE_URL}/orders`,
     details: (id: string) => `${API_BASE_URL}/orders/${id}`,
+    approve: (id: string) => `${API_BASE_URL}/orders/${id}/approve`,
+    reject: (id: string) => `${API_BASE_URL}/orders/${id}/reject`,
+  },
+
+  // Documents
+  documents: {
+    list: `${API_BASE_URL}/documents`,
+    upload: `${API_BASE_URL}/documents`,
+    byOrder: (orderId: string) => `${API_BASE_URL}/documents/order/${orderId}`,
   },
 
   // Notifications
@@ -71,6 +86,8 @@ export const API_ENDPOINTS = {
 
   // Users
   users: {
+    list: `${API_BASE_URL}/users`,
+    create: `${API_BASE_URL}/users`,
     meImage: `${API_BASE_URL}/users/me/image`,
   },
 };

@@ -29,6 +29,12 @@ type AuthContextType = {
 
   isLoading: boolean;
 
+  isSuperAdmin: boolean;
+
+  isMR: boolean;
+
+  isMRHead: boolean;
+
   login: (
     credentials: LoginRequest
   ) => Promise<void>;
@@ -60,6 +66,10 @@ export function AuthProvider({
     isLoading,
     setIsLoading,
   ] = useState(true);
+
+  const isSuperAdmin = user?.role === "superadmin";
+  const isMR = user?.role === "MR";
+  const isMRHead = user?.role === "MR-head";
 
   /**
    * Check whether the device already
@@ -142,7 +152,7 @@ export function AuthProvider({
     try {
       await authService.logout();
     } catch (error) {
-      console.warn('authService.logout notice:', error);
+      console.warn("authService.logout notice:", error);
     } finally {
       setUser(null);
     }
@@ -162,6 +172,12 @@ export function AuthProvider({
           Boolean(user),
 
         isLoading,
+
+        isSuperAdmin,
+
+        isMR,
+
+        isMRHead,
 
         login,
 

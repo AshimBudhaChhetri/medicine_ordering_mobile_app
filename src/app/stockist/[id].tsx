@@ -1,8 +1,10 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,16 +16,56 @@ import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
+import { Stockist } from "../../types/stockist";
 
 export default function StockistDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { stockists } = useStockists();
-  const { requests } = useRequests();
+  const { stockists, getStockistById, refreshStockists } = useStockists();
+  const { requests, refreshOrders } = useRequests();
 
   const { gutter, contentMaxWidth } = useResponsive();
 
-  const stockist = stockists.find((item) => item.id === id);
+  const [stockist, setStockist] = useState<Stockist | null>(() => {
+    return stockists.find((item) => item.id === id) || null;
+  });
+  const [isLoading, setIsLoading] = useState(!stockist);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Load stockist if not found in memory
+  const loadStockist = useCallback(async () => {
+    if (!id) return;
+    try {
+      const found = await getStockistById(id);
+      if (found) {
+        setStockist(found);
+      }
+    } catch {
+      // Handled
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, getStockistById]);
+
+  useEffect(() => {
+    const memory = stockists.find((item) => item.id === id);
+    if (memory) {
+      setStockist(memory);
+      setIsLoading(false);
+    } else {
+      loadStockist();
+    }
+  }, [id, stockists, loadStockist]);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      refreshStockists().catch(() => {}),
+      refreshOrders().catch(() => {}),
+      loadStockist().catch(() => {}),
+    ]);
+    setIsRefreshing(false);
+  }, [refreshStockists, refreshOrders, loadStockist]);
 
   // Orders for this stockist
   const stockistRequests = useMemo(() => {
@@ -39,11 +81,30 @@ export default function StockistDetailsScreen() {
     return s === "approved" || s === "completed";
   }).length;
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading stockist details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!stockist) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.notFound}>
+          <MaterialCommunityIcons
+            name="store-remove-outline"
+            size={48}
+            color={colors.textMuted}
+          />
           <Text style={styles.notFoundTitle}>Stockist not found</Text>
+          <Text style={styles.notFoundSubtitle}>
+            This stockist may have been removed or is unavailable.
+          </Text>
 
           <Pressable
             style={styles.backButtonSimple}
@@ -72,6 +133,13 @@ export default function StockistDetailsScreen() {
           styles.scrollContent,
           { paddingHorizontal: gutter },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View
           style={[
@@ -285,10 +353,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 22,
+    marginBottom: 20,
   },
   backButton: {
     width: 44,
@@ -343,16 +422,16 @@ const styles = StyleSheet.create({
   activeBadge: {
     backgroundColor: colors.successSoft,
     paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 20,
   },
   activeText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.success,
   },
   sectionTitle: {
-    marginTop: 26,
+    marginTop: 24,
     marginBottom: 12,
     fontSize: 16,
     fontWeight: "600",
@@ -421,7 +500,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 26,
+    marginTop: 24,
     marginBottom: 12,
   },
   sectionTitleNoMargin: {
@@ -454,15 +533,15 @@ const styles = StyleSheet.create({
   statusBadge: {
     borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   statusText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   primaryButton: {
     minHeight: 52,
-    marginTop: 28,
+    marginTop: 26,
     borderRadius: 15,
     backgroundColor: colors.primary,
     flexDirection: "row",
@@ -482,12 +561,21 @@ const styles = StyleSheet.create({
     padding: 30,
   },
   notFoundTitle: {
+    marginTop: 14,
     fontSize: 18,
     fontWeight: "600",
     color: colors.text,
   },
+  notFoundSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+    fontWeight: "400",
+  },
   backButtonSimple: {
-    marginTop: 18,
+    marginTop: 20,
     paddingHorizontal: 20,
     paddingVertical: 11,
     backgroundColor: colors.primary,
@@ -495,6 +583,6 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: "#FFFFFF",
-    fontWeight: "600",
+    fontWeight: "500",
   },
 });

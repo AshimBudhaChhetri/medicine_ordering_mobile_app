@@ -4,10 +4,24 @@ import { CreateStockistInput, Stockist } from "../types/stockist";
 
 export const stockistService = {
   /**
-   * Fetch approved stockists.
+   * Fetch approved stockists from backend.
    */
   async getStockists(): Promise<Stockist[]> {
-    return apiRequest<Stockist[]>(API_ENDPOINTS.stockists.list, {
+    const res = await apiRequest<any>(API_ENDPOINTS.stockists.list, {
+      method: "GET",
+    });
+
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.stockists)) return res.stockists;
+    if (Array.isArray(res?.data)) return res.data;
+    return [];
+  },
+
+  /**
+   * Fetch a single stockist by ID.
+   */
+  async getStockist(id: string): Promise<Stockist> {
+    return apiRequest<Stockist>(API_ENDPOINTS.stockists.details(id), {
       method: "GET",
     });
   },
@@ -25,4 +39,3 @@ export const stockistService = {
     });
   },
 };
-

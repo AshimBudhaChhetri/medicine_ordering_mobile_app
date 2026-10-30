@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 
@@ -28,7 +28,7 @@ import { colors } from "../../theme/colors";
 import { DashboardStats } from "../../types/dashboard";
 
 export default function DashboardScreen() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const { requests, refreshOrders } = useRequests();
   const { stockists, refreshStockists } = useStockists();
 
@@ -57,12 +57,21 @@ export default function DashboardScreen() {
     loadDashboardData();
   }, [loadDashboardData]);
 
+  // Refresh data whenever the home screen comes into view
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData().catch(() => { });
+      refreshOrders().catch(() => { });
+      refreshStockists().catch(() => { });
+    }, [loadDashboardData, refreshOrders, refreshStockists])
+  );
+
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await Promise.all([
-      refreshOrders().catch(() => {}),
-      refreshStockists().catch(() => {}),
-      loadDashboardData().catch(() => {}),
+      refreshOrders().catch(() => { }),
+      refreshStockists().catch(() => { }),
+      loadDashboardData().catch(() => { }),
     ]);
     setIsRefreshing(false);
   }, [refreshOrders, refreshStockists, loadDashboardData]);
@@ -71,11 +80,22 @@ export default function DashboardScreen() {
   const pendingRequests = requests.filter(
     (request) => request.status?.toLowerCase() === "pending"
   );
+  const completedRequests = requests.filter((r) => {
+    const s = r.status?.toLowerCase();
+    return s === "approved" || s === "completed";
+  });
 
   const recentRequests = requests.slice(0, 3);
   const recentStockists = stockists.slice(0, 3);
 
-  const greeting = getGreeting();
+  const roleLabel =
+    user?.role === "MR"
+      ? "Medical Representative"
+      : user?.role === "MR-head"
+      ? "Branch Head"
+      : user?.role === "superadmin"
+      ? "Super Administrator"
+      : "Staff";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -110,15 +130,8 @@ export default function DashboardScreen() {
           {/* HEADER */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.greeting}>{greeting} 👋</Text>
-              <Text style={styles.name}>{user?.name || "Medical Representative"}</Text>
-              <Text style={styles.role}>
-                {user?.role === "MR"
-                  ? "Medical Representative"
-                  : user?.role === "MR-head"
-                  ? "Branch Head"
-                  : user?.role || "Medical Representative"}
-              </Text>
+              <Text style={styles.name}>{user?.name || "User"}</Text>
+              <Text style={styles.role}>{roleLabel}</Text>
             </View>
 
             <Pressable
@@ -137,25 +150,56 @@ export default function DashboardScreen() {
             </Pressable>
           </View>
 
-          {/* HERO */}
+          {/* HERO QUICK ACTIONS */}
           <View style={[styles.hero, isTablet ? styles.heroTablet : undefined]}>
             <View style={styles.heroTextArea}>
-              <Text style={styles.heroTitle}>Create a new medicine request</Text>
+              <View style={styles.heroActionsRow}>
+                {/* New Order Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.heroButton,
+                    pressed && styles.heroButtonPressed,
+                  ]}
+                  onPress={() => router.push("/(tabs)/new-request")}
+                >
+                  <MaterialCommunityIcons name="plus" size={19} color="#FFFFFF" />
+                  <Text style={styles.heroButtonText}>New Order</Text>
+                </Pressable>
 
-              <Text style={styles.heroDescription}>
-                Select one of your stockists and request the medicines they need.
-              </Text>
+                {/* My Orders Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.heroSecondaryButton,
+                    pressed && styles.heroButtonPressed,
+                  ]}
+                  onPress={() => router.push("/(tabs)/requests")}
+                >
+                  <MaterialCommunityIcons
+                    name="clipboard-text-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.heroSecondaryText}>My Orders</Text>
+                </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.heroButton,
-                  pressed && styles.heroButtonPressed,
-                ]}
-                onPress={() => router.push("/(tabs)/new-request")}
-              >
-                <MaterialCommunityIcons name="plus" size={19} color="#FFFFFF" />
-                <Text style={styles.heroButtonText}>New Request</Text>
-              </Pressable>
+                {/* Only superadmin can add products */}
+                {isSuperAdmin && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.heroSecondaryButton,
+                      pressed && styles.heroButtonPressed,
+                    ]}
+                    onPress={() => router.push("/product/add")}
+                  >
+                    <MaterialCommunityIcons
+                      name="pill"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.heroSecondaryText}>Add Product</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             {isTablet && (
@@ -167,13 +211,79 @@ export default function DashboardScreen() {
             )}
           </View>
 
-          {/* OVERVIEW */}
+          {/* SUPERADMIN MANAGEMENT SHORTCUTS */}
+          {isSuperAdmin && (
+            <View style={styles.adminShortcutsCard}>
+              <Text style={styles.adminShortcutsTitle}>Admin Management</Text>
+              <View style={styles.adminShortcutsRow}>
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/admin/users")}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="account-group-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Users</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/admin/registrations")}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="account-plus-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Registrations</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/document" as any)}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="folder-open-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Documents</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/product/add")}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="pill"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Products</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+
+
+          {/* OVERVIEW STATS */}
           <Text style={styles.sectionTitle}>Overview</Text>
 
           <View style={styles.statsGrid}>
             <View style={styles.statWrapper}>
               <StatCard
-                title="Pending Requests"
+                title="Pending Orders"
                 value={stats?.pendingOrders ?? pendingRequests.length}
                 icon="clock-outline"
                 tone="orange"
@@ -182,30 +292,41 @@ export default function DashboardScreen() {
 
             <View style={styles.statWrapper}>
               <StatCard
-                title="Total Orders"
-                value={stats?.totalOrders ?? requests.length}
-                icon="clipboard-list-outline"
-                tone="blue"
-              />
-            </View>
-
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Approved Revenue"
-                value={`Rs. ${(stats?.approvedRevenue ?? 0).toLocaleString()}`}
-                icon="cash-check"
+                title="Completed Orders"
+                value={completedRequests.length}
+                icon="check-circle-outline"
                 tone="green"
               />
             </View>
 
             <View style={styles.statWrapper}>
               <StatCard
-                title="My Stockists"
-                value={stockists.length}
-                icon="storefront-outline"
-                tone="purple"
+                title="Total Orders"
+                value={stats?.totalOrders ?? requests.length}
+                icon="receipt-text-outline"
+                tone="blue"
               />
             </View>
+
+            {isSuperAdmin ? (
+              <View style={styles.statWrapper}>
+                <StatCard
+                  title="Total Users"
+                  value={stats?.totalUsers ?? 0}
+                  icon="account-group-outline"
+                  tone="purple"
+                />
+              </View>
+            ) : (
+              <View style={styles.statWrapper}>
+                <StatCard
+                  title="My Stockists"
+                  value={stockists.length}
+                  icon="storefront-outline"
+                  tone="purple"
+                />
+              </View>
+            )}
           </View>
 
           {/* MAIN CONTENT */}
@@ -218,7 +339,7 @@ export default function DashboardScreen() {
             {/* RECENT REQUESTS */}
             <View style={styles.sectionColumn}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Requests</Text>
+                <Text style={styles.sectionTitle}>Recent Orders</Text>
 
                 <Pressable onPress={() => router.push("/(tabs)/requests")}>
                   <Text style={styles.viewAll}>View all</Text>
@@ -253,70 +374,65 @@ export default function DashboardScreen() {
                     color={colors.textMuted}
                   />
 
-                  <Text style={styles.emptyTitle}>No requests yet</Text>
+                  <Text style={styles.emptyTitle}>No orders yet</Text>
 
                   <Text style={styles.emptyText}>
-                    Your recent medicine requests will appear here.
+                    Your recent medicine orders will appear here.
                   </Text>
                 </View>
               )}
             </View>
 
-            {/* MY STOCKISTS */}
-            <View style={styles.sectionColumn}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>My Stockists</Text>
+            {/* MY STOCKISTS (MR only) */}
+            {!isSuperAdmin && (
+              <View style={styles.sectionColumn}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>My Stockists</Text>
 
-                <Pressable onPress={() => router.push("/(tabs)/stockists")}>
-                  <Text style={styles.viewAll}>View all</Text>
-                </Pressable>
-              </View>
-
-              {recentStockists.length > 0 ? (
-                recentStockists.map((stockist) => (
-                  <Pressable
-                    key={stockist.id}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/stockist/[id]",
-                        params: { id: stockist.id },
-                      })
-                    }
-                  >
-                    <StockistCard
-                      name={stockist.name}
-                      location={stockist.location}
-                    />
+                  <Pressable onPress={() => router.push("/(tabs)/stockists")}>
+                    <Text style={styles.viewAll}>View all</Text>
                   </Pressable>
-                ))
-              ) : (
-                <View style={styles.emptyCard}>
-                  <MaterialCommunityIcons
-                    name="storefront-outline"
-                    size={31}
-                    color={colors.textMuted}
-                  />
-
-                  <Text style={styles.emptyTitle}>No stockists added</Text>
-
-                  <Text style={styles.emptyText}>
-                    Add your stockists to quickly place requests for them.
-                  </Text>
                 </View>
-              )}
-            </View>
+
+                {recentStockists.length > 0 ? (
+                  recentStockists.map((stockist) => (
+                    <Pressable
+                      key={stockist.id}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/stockist/[id]",
+                          params: { id: stockist.id },
+                        })
+                      }
+                    >
+                      <StockistCard
+                        name={stockist.name}
+                        location={stockist.location}
+                      />
+                    </Pressable>
+                  ))
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <MaterialCommunityIcons
+                      name="storefront-outline"
+                      size={31}
+                      color={colors.textMuted}
+                    />
+
+                    <Text style={styles.emptyTitle}>No stockists added</Text>
+
+                    <Text style={styles.emptyText}>
+                      Add your stockists to quickly place orders for them.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
 }
 
 const styles = StyleSheet.create({
@@ -325,97 +441,96 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingTop: 12,
+    paddingBottom: 35,
   },
   container: {
-    flex: 1,
+    width: "100%",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 12,
-    paddingBottom: 24,
-  },
-  greeting: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: "400",
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
   name: {
-    marginTop: 3,
-    fontSize: 22,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "500",
     color: colors.text,
+    marginTop: 2,
   },
   role: {
-    marginTop: 3,
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.primary,
+    marginTop: 2,
     fontWeight: "400",
   },
   notificationButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
   },
   notificationDot: {
-    position: "absolute",
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.danger,
-    top: 9,
-    right: 10,
-    borderWidth: 1.5,
-    borderColor: colors.card,
+    position: "absolute",
+    top: 11,
+    right: 12,
   },
   hero: {
-    backgroundColor: "#EAF1FF",
-    borderRadius: 24,
-    padding: 22,
-    marginBottom: 28,
-    borderWidth: 1,
+    backgroundColor: "transparent",
     borderColor: colors.border,
+    borderRadius: 2,
+    padding: 0,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   heroTablet: {
-    minHeight: 190,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 32,
+    padding: 28,
   },
   heroTextArea: {
-    maxWidth: 520,
+    flex: 1,
   },
-  heroTitle: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "600",
-    color: colors.text,
-  },
-  heroDescription: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.textSecondary,
-    fontWeight: "400",
+  heroActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
   },
   heroButton: {
-    marginTop: 20,
-    alignSelf: "flex-start",
     backgroundColor: colors.primary,
-    borderRadius: 13,
-    paddingVertical: 12,
-    paddingHorizontal: 17,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  heroSecondaryButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  heroSecondaryText: {
+    color: colors.primary,
+    fontWeight: "500",
+    fontSize: 13,
   },
   heroButtonPressed: {
     opacity: 0.88,
@@ -423,28 +538,84 @@ const styles = StyleSheet.create({
   },
   heroButtonText: {
     color: "#FFFFFF",
-    fontWeight: "600",
+    fontWeight: "500",
+    fontSize: 13,
+  },
+  adminShortcutsCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 16,
+  },
+  adminShortcutsTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+    marginBottom: 12,
+  },
+  adminShortcutsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  adminShortcutItem: {
+    alignItems: "center",
+    gap: 6,
+  },
+  adminShortcutIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminShortcutLabel: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: colors.text,
+    textAlign: "center",
+  },
+  mrDocShortcut: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  mrDocShortcutText: {
+    flex: 1,
     fontSize: 14,
+    fontWeight: "400",
+    color: colors.text,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "500",
     color: colors.text,
   },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
-    marginTop: 14,
-    marginBottom: 22,
+    marginTop: 12,
+    marginBottom: 20,
   },
   statWrapper: {
-    minWidth: 150,
+    minWidth: 140,
     flexGrow: 1,
     flexBasis: "47%",
   },
   dashboardContent: {
-    gap: 26,
+    gap: 24,
   },
   dashboardContentTablet: {
     flexDirection: "row",
@@ -457,39 +628,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 13,
+    marginBottom: 12,
   },
   viewAll: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     color: colors.primary,
   },
   emptyCard: {
-    minHeight: 160,
-    padding: 22,
-    borderRadius: 17,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.card,
-    justifyContent: "center",
+    borderRadius: 12,
+    padding: 24,
     alignItems: "center",
   },
   emptyTitle: {
-    marginTop: 10,
+    marginTop: 8,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
   emptyText: {
-    marginTop: 5,
-    maxWidth: 250,
-    textAlign: "center",
+    marginTop: 3,
     fontSize: 12,
-    lineHeight: 17,
-    color: colors.textSecondary,
+    color: colors.textMuted,
+    textAlign: "center",
     fontWeight: "400",
   },
   buttonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
 });

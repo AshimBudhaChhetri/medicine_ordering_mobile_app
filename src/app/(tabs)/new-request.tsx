@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../context/AuthContext";
 import { useProducts } from "../../context/ProductContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
@@ -33,11 +34,19 @@ export default function NewRequestScreen() {
     stockistId?: string;
   }>();
 
-  const { stockists } = useStockists();
-  const { products, isLoading: isProductsLoading } = useProducts();
+  const { stockists, refreshStockists } = useStockists();
+  const { isSuperAdmin } = useAuth();
+  const { products, isLoading: isProductsLoading, refreshProducts } = useProducts();
   const { createOrder } = useRequests();
 
   const { gutter, contentMaxWidth } = useResponsive();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshStockists().catch(() => {});
+      refreshProducts().catch(() => {});
+    }, [refreshStockists, refreshProducts])
+  );
 
   // =========================================================
   // STOCKIST
@@ -56,7 +65,7 @@ export default function NewRequestScreen() {
   const filteredStockists = useMemo(() => {
     const query = stockistSearch.trim().toLowerCase();
     if (!query) {
-      return [];
+      return stockists.slice(0, 8);
     }
 
     return stockists
@@ -239,7 +248,7 @@ export default function NewRequestScreen() {
     }
 
     if (selectedMedicines.length === 0) {
-      Alert.alert("Empty Request", "Please add at least one medicine.");
+      Alert.alert("Empty Order", "Please add at least one medicine.");
       return;
     }
 
@@ -313,7 +322,7 @@ export default function NewRequestScreen() {
         >
           {/* HEADER */}
           <View style={styles.header}>
-            <Text style={styles.title}>New Medicine Request</Text>
+            <Text style={styles.title}>New Medicine Order</Text>
             <Text style={styles.subtitle}>
               Choose a stockist and add the medicines they require.
             </Text>
@@ -426,7 +435,7 @@ export default function NewRequestScreen() {
                   />
                   <Text style={styles.noResultTitle}>No stockists registered</Text>
                   <Text style={styles.noResultText}>
-                    Add your first stockist to start placing requests.
+                    Add your first stockist to start placing orders.
                   </Text>
                   <Pressable
                     style={styles.addStockistButton}
@@ -526,12 +535,28 @@ export default function NewRequestScreen() {
 
               {/* LIST HEADER */}
               <View style={styles.medicineListHeader}>
-                <Text style={styles.medicineListTitle}>
-                  {medicineSearch.trim() ? "Search Results" : "Catalogue Products"}
-                </Text>
-                <Text style={styles.medicineCount}>
-                  {filteredMedicines.length}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.medicineListTitle}>
+                    {medicineSearch.trim() ? "Search Results" : "Catalogue Products"}
+                  </Text>
+                  <Text style={styles.medicineCount}>
+                    {filteredMedicines.length}
+                  </Text>
+                </View>
+
+                {isSuperAdmin && (
+                  <Pressable
+                    style={styles.addProductSmallButton}
+                    onPress={() => router.push("/product/add")}
+                  >
+                    <MaterialCommunityIcons
+                      name="plus"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.addProductSmallText}>Add Product</Text>
+                  </Pressable>
+                )}
               </View>
 
               {isProductsLoading ? (
@@ -629,8 +654,21 @@ export default function NewRequestScreen() {
                   />
                   <Text style={styles.noResultTitle}>No products found</Text>
                   <Text style={styles.noResultText}>
-                    Try searching for another product name or category.
+                    Can&apos;t find this medicine in the catalogue?
                   </Text>
+                  {isSuperAdmin && (
+                    <Pressable
+                      style={styles.addStockistButton}
+                      onPress={() => router.push("/product/add")}
+                    >
+                      <MaterialCommunityIcons
+                        name="plus"
+                        size={18}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.addStockistText}>Add New Product</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
             </>
@@ -841,7 +879,7 @@ export default function NewRequestScreen() {
 
             <View style={styles.cartHeader}>
               <View>
-                <Text style={styles.modalTitle}>Your Request</Text>
+                <Text style={styles.modalTitle}>Your Order</Text>
                 <Text style={styles.modalSubtitle}>
                   {selectedStockist?.name}
                 </Text>
@@ -1087,6 +1125,20 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  addProductSmallButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 8,
+  },
+  addProductSmallText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
   },
   medicineListHeader: {
     flexDirection: "row",

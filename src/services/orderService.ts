@@ -70,5 +70,23 @@ export const orderService = {
       body: input,
     });
   },
-};
 
+  /**
+   * Approve a pending order (Superadmin only).
+   */
+  async approveOrder(id: string): Promise<Order> {
+    return apiRequest<Order>(API_ENDPOINTS.orders.approve(id), {
+      method: "PATCH",
+    });
+  },
+
+  /**
+   * Reject a pending order (Superadmin only).
+   */
+  async rejectOrder(id: string, reason?: string): Promise<Order> {
+    return apiRequest<Order>(API_ENDPOINTS.orders.reject(id), {
+      method: "PATCH",
+      body: reason ? { reason } : {},
+    });
+  },
+};

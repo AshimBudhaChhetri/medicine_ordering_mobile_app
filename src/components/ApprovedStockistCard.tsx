@@ -8,6 +8,8 @@ type Props = {
   location: string;
   contactPerson?: string;
   phone?: string;
+  totalOrders?: number;
+  createdDate?: string;
   onPress?: () => void;
   onNewRequest?: () => void;
 };
@@ -17,6 +19,8 @@ export function ApprovedStockistCard({
   location,
   contactPerson,
   phone,
+  totalOrders,
+  createdDate,
   onPress,
   onNewRequest,
 }: Props) {
@@ -49,6 +53,35 @@ export function ApprovedStockistCard({
           <Text style={styles.activeText}>Active</Text>
         </View>
       </View>
+
+      {/* Dynamic Orders & Registration Meta */}
+      {(totalOrders !== undefined || createdDate) && (
+        <View style={styles.metaRow}>
+          {totalOrders !== undefined && (
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons
+                name="clipboard-list-outline"
+                size={14}
+                color={colors.primary}
+              />
+              <Text style={styles.metaText}>
+                {totalOrders} {totalOrders === 1 ? "order" : "orders"} placed
+              </Text>
+            </View>
+          )}
+
+          {createdDate && (
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons
+                name="calendar-check-outline"
+                size={14}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.metaDateText}>Added {createdDate}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {(contactPerson || phone) && (
         <>
@@ -86,7 +119,7 @@ export function ApprovedStockistCard({
         />
 
         <Text style={styles.requestButtonText}>
-          New Medicine Request
+          New Medicine Order
         </Text>
       </Pressable>
     </Pressable>
@@ -134,15 +167,40 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   activeBadge: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
     borderRadius: 20,
     backgroundColor: colors.successSoft,
   },
   activeText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.success,
+  },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
+  },
+  metaDateText: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: colors.textSecondary,
   },
   divider: {
     height: 1,
@@ -161,7 +219,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   requestButton: {
-    marginTop: 16,
+    marginTop: 14,
     borderRadius: 12,
     paddingVertical: 11,
     backgroundColor: colors.primarySoft,
@@ -172,7 +230,7 @@ const styles = StyleSheet.create({
   },
   requestButtonText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.primary,
   },
 });

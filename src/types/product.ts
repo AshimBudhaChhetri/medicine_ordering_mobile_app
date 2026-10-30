@@ -1,6 +1,7 @@
 export interface CatalogOption {
   id: string;
   name: string;
+  description?: string;
 }
 
 export interface CatalogOptions {
@@ -33,3 +34,16 @@ export interface ProductQueryParams {
   batch?: string;
 }
 
+export interface CreateProductInput {
+  name: string;
+  unitId?: string;
+  typeId?: string;
+  mrp?: number;
+  sales?: number;
+  price: number;
+  batch?: string;
+  expiry?: string;
+  amount?: number;
+  remarks?: string;
+  imageUrl?: string;
+}

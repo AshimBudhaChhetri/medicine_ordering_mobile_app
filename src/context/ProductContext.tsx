@@ -8,7 +8,12 @@ import {
 } from "react";
 
 import { productService } from "../services/productService";
-import { CatalogOptions, Product, ProductQueryParams } from "../types/product";
+import {
+  CatalogOptions,
+  CreateProductInput,
+  Product,
+  ProductQueryParams,
+} from "../types/product";
 import { useAuth } from "./AuthContext";
 
 export type ProductContextType = {
@@ -17,6 +22,7 @@ export type ProductContextType = {
   isLoading: boolean;
   error: string | null;
   refreshProducts: (params?: ProductQueryParams) => Promise<void>;
+  addProduct: (input: CreateProductInput) => Promise<Product>;
 };
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -63,6 +69,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, refreshProducts]);
 
+  const addProduct = async (input: CreateProductInput): Promise<Product> => {
+    const created = await productService.createProduct(input);
+    setProducts((prev) => [created, ...prev]);
+    return created;
+  };
+
   return (
     <ProductContext.Provider
       value={{
@@ -71,6 +83,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         refreshProducts,
+        addProduct,
       }}
     >
       {children}
@@ -85,4 +98,3 @@ export function useProducts() {
   }
   return context;
 }
-

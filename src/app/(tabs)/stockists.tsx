@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -16,23 +16,47 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApprovedStockistCard } from "../../components/ApprovedStockistCard";
+import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
 export default function StockistsScreen() {
   const { stockists, isLoading, refreshStockists } = useStockists();
+  const { requests, refreshOrders } = useRequests();
 
   const [search, setSearch] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
+  // Re-fetch stockists and orders whenever the tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshStockists().catch(() => { });
+      refreshOrders().catch(() => { });
+    }, [refreshStockists, refreshOrders])
+  );
+
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await refreshStockists().catch(() => {});
+    await Promise.all([
+      refreshStockists().catch(() => { }),
+      refreshOrders().catch(() => { }),
+    ]);
     setIsRefreshing(false);
-  }, [refreshStockists]);
+  }, [refreshStockists, refreshOrders]);
+
+  // Map orders count by stockist ID
+  const ordersCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const req of requests) {
+      if (req.stockistId) {
+        map[req.stockistId] = (map[req.stockistId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [requests]);
 
   // Filter stockists
   const filteredStockists = useMemo(() => {
@@ -72,10 +96,10 @@ export default function StockistsScreen() {
             styles.container,
             contentMaxWidth
               ? {
-                  width: "100%",
-                  maxWidth: contentMaxWidth,
-                  alignSelf: "center",
-                }
+                width: "100%",
+                maxWidth: contentMaxWidth,
+                alignSelf: "center",
+              }
               : undefined,
           ]}
         >
@@ -83,9 +107,9 @@ export default function StockistsScreen() {
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={styles.title}>My Stockists</Text>
-              <Text style={styles.subtitle}>
+              {/* <Text style={styles.subtitle}>
                 View and manage the pharmacies and stockists in your territory.
-              </Text>
+              </Text> */}
             </View>
 
             {/* Tablet Add Button */}
@@ -154,32 +178,45 @@ export default function StockistsScreen() {
                 isTablet ? styles.cardGridTablet : undefined,
               ]}
             >
-              {filteredStockists.map((stockist) => (
-                <View
-                  key={stockist.id}
-                  style={[
-                    styles.cardWrapper,
-                    isTablet ? styles.cardWrapperTablet : undefined,
-                  ]}
-                >
-                  <ApprovedStockistCard
-                    name={stockist.name}
-                    location={stockist.location}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/stockist/[id]",
-                        params: { id: stockist.id },
-                      })
-                    }
-                    onNewRequest={() =>
-                      router.push({
-                        pathname: "/(tabs)/new-request",
-                        params: { stockistId: stockist.id },
-                      })
-                    }
-                  />
-                </View>
-              ))}
+              {filteredStockists.map((stockist) => {
+                const totalOrders = ordersCountMap[stockist.id] || 0;
+                const createdDate = stockist.createdAt
+                  ? new Date(stockist.createdAt).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                  : undefined;
+
+                return (
+                  <View
+                    key={stockist.id}
+                    style={[
+                      styles.cardWrapper,
+                      isTablet ? styles.cardWrapperTablet : undefined,
+                    ]}
+                  >
+                    <ApprovedStockistCard
+                      name={stockist.name}
+                      location={stockist.location}
+                      totalOrders={totalOrders}
+                      createdDate={createdDate}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/stockist/[id]",
+                          params: { id: stockist.id },
+                        })
+                      }
+                      onNewRequest={() =>
+                        router.push({
+                          pathname: "/(tabs)/new-request",
+                          params: { stockistId: stockist.id },
+                        })
+                      }
+                    />
+                  </View>
+                );
+              })}
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -223,7 +260,7 @@ export default function StockistsScreen() {
             >
               <MaterialCommunityIcons
                 name="store-plus-outline"
-                size={21}
+                size={20}
                 color="#FFFFFF"
               />
               <Text style={styles.addButtonText}>Add New Stockist</Text>
@@ -241,70 +278,97 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   scrollContent: {
-    paddingTop: 12,
-    paddingBottom: 120,
+    flexGrow: 1,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
   container: {
-    flex: 1,
+    width: "100%",
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 22,
-    gap: 20,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
   headerText: {
     flex: 1,
   },
   title: {
-    fontSize: 27,
+    fontSize: 22,
     fontWeight: "600",
     color: colors.text,
   },
   subtitle: {
-    marginTop: 6,
-    maxWidth: 560,
+    marginTop: 4,
     fontSize: 13,
-    lineHeight: 19,
     color: colors.textSecondary,
     fontWeight: "400",
   },
-  searchContainer: {
+  addButtonTablet: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  addButton: {
+    marginTop: 20,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
     minHeight: 50,
-    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    marginRight: 8,
-    paddingVertical: 0,
+    marginLeft: 9,
     fontSize: 14,
     color: colors.text,
-    fontWeight: "400",
+    paddingVertical: 0,
   },
   sectionHeader: {
-    marginTop: 24,
-    marginBottom: 12,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   sectionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
   },
   sectionCount: {
     fontSize: 12,
-    fontWeight: "600",
-    color: colors.textMuted,
+    fontWeight: "500",
+    color: colors.primary,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   cardGrid: {
     gap: 12,
@@ -312,88 +376,58 @@ const styles = StyleSheet.create({
   cardGridTablet: {
     flexDirection: "row",
     flexWrap: "wrap",
-    alignItems: "flex-start",
+    gap: 16,
   },
   cardWrapper: {
     width: "100%",
   },
   cardWrapperTablet: {
-    width: "48.8%",
-  },
-  addButtonTablet: {
-    minHeight: 46,
-    paddingVertical: 11,
-    paddingHorizontal: 17,
-    borderRadius: 13,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  addButton: {
-    marginTop: 20,
-    minHeight: 52,
-    paddingVertical: 13,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-  },
-  addButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  buttonPressed: {
-    opacity: 0.85,
+    width: "48%",
   },
   emptyState: {
-    padding: 36,
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: colors.card,
-    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    marginTop: 10,
+    borderRadius: 20,
+    padding: 30,
+    alignItems: "center",
+    marginVertical: 12,
   },
   emptyIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
     color: colors.text,
   },
   emptyText: {
-    marginTop: 4,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textSecondary,
     textAlign: "center",
+    marginTop: 4,
+    lineHeight: 18,
     fontWeight: "400",
   },
   emptyAddButton: {
     marginTop: 16,
     backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   emptyAddText: {
     color: "#FFFFFF",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
   },
 });

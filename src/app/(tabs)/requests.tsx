@@ -87,9 +87,9 @@ export default function RequestsScreen() {
           {/* HEADER */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>My Requests</Text>
+              <Text style={styles.title}>My Orders</Text>
               <Text style={styles.subtitle}>
-                View medicine requests submitted for your stockists.
+                View medicine orders submitted for your stockists.
               </Text>
             </View>
 
@@ -99,7 +99,7 @@ export default function RequestsScreen() {
                 onPress={() => router.push("/(tabs)/new-request")}
               >
                 <MaterialCommunityIcons name="plus" size={19} color="#FFFFFF" />
-                <Text style={styles.newRequestText}>New Request</Text>
+                <Text style={styles.newRequestText}>New Order</Text>
               </Pressable>
             )}
           </View>
@@ -114,7 +114,7 @@ export default function RequestsScreen() {
             <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder="Search request or stockist..."
+              placeholder="Search order or stockist..."
               placeholderTextColor={colors.textMuted}
               style={styles.searchInput}
             />
@@ -162,7 +162,7 @@ export default function RequestsScreen() {
 
           {/* COUNT */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Requests</Text>
+            <Text style={styles.sectionTitle}>Orders</Text>
             <Text style={styles.requestCount}>{filteredRequests.length}</Text>
           </View>
 
@@ -247,7 +247,7 @@ export default function RequestsScreen() {
                 />
               </View>
 
-              <Text style={styles.emptyTitle}>No requests found</Text>
+              <Text style={styles.emptyTitle}>No orders found</Text>
               <Text style={styles.emptyText}>
                 Try changing the search or status filter.
               </Text>
@@ -261,7 +261,7 @@ export default function RequestsScreen() {
               onPress={() => router.push("/(tabs)/new-request")}
             >
               <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
-              <Text style={styles.newRequestText}>New Medicine Request</Text>
+              <Text style={styles.newRequestText}>New Medicine Order</Text>
             </Pressable>
           )}
         </View>

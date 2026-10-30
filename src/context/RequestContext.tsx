@@ -51,6 +51,8 @@ export type RequestContextType = {
   refreshOrders: (params?: OrderQueryParams) => Promise<void>;
   createOrder: (input: CreateOrderInput) => Promise<Order>;
   getOrderById: (id: string) => Promise<Order | undefined>;
+  approveOrder: (id: string) => Promise<Order>;
+  rejectOrder: (id: string, reason?: string) => Promise<Order>;
   createRequest: (input: {
     stockistId: string;
     stockistName?: string;
@@ -153,6 +155,18 @@ export function RequestProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const approveOrder = async (id: string): Promise<Order> => {
+    const updated = await orderService.approveOrder(id);
+    setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    return updated;
+  };
+
+  const rejectOrder = async (id: string, reason?: string): Promise<Order> => {
+    const updated = await orderService.rejectOrder(id, reason);
+    setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    return updated;
+  };
+
   const createRequest = async (input: {
     stockistId: string;
     stockistName?: string;
@@ -192,6 +206,8 @@ export function RequestProvider({ children }: { children: ReactNode }) {
         refreshOrders: fetchOrders,
         createOrder,
         getOrderById,
+        approveOrder,
+        rejectOrder,
         createRequest,
       }}
     >

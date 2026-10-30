@@ -2,6 +2,7 @@ import { apiRequest } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import {
   CatalogOptions,
+  CreateProductInput,
   Product,
   ProductQueryParams,
 } from "../types/product";
@@ -25,9 +26,14 @@ export const productService = {
       ? `${API_ENDPOINTS.products.list}?${query}`
       : API_ENDPOINTS.products.list;
 
-    return apiRequest<Product[]>(url, {
+    const res = await apiRequest<any>(url, {
       method: "GET",
     });
+
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.products)) return res.products;
+    if (Array.isArray(res?.data)) return res.data;
+    return [];
   },
 
   /**
@@ -41,5 +47,14 @@ export const productService = {
       }
     );
   },
-};
 
+  /**
+   * Add a new product to the catalogue.
+   */
+  async createProduct(input: CreateProductInput): Promise<Product> {
+    return apiRequest<Product>(API_ENDPOINTS.products.create, {
+      method: "POST",
+      body: input,
+    });
+  },
+};

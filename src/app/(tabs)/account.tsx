@@ -10,7 +10,7 @@ import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
 export default function AccountScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin } = useAuth();
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
   const handleLogout = () => {
@@ -51,10 +51,10 @@ export default function AccountScreen() {
     user?.role === "MR"
       ? "Medical Representative"
       : user?.role === "MR-head"
-      ? "Branch Head"
-      : user?.role === "superadmin"
-      ? "Super Administrator"
-      : "Medical Representative";
+        ? "Branch Head"
+        : user?.role === "superadmin"
+          ? "Super Administrator"
+          : "Medical Representative";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -70,19 +70,19 @@ export default function AccountScreen() {
             styles.container,
             contentMaxWidth
               ? {
-                  width: "100%",
-                  maxWidth: 1000,
-                  alignSelf: "center",
-                }
+                width: "100%",
+                maxWidth: 1000,
+                alignSelf: "center",
+              }
               : undefined,
           ]}
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Account</Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.title}>Account Settings</Text>
+            {/* <Text style={styles.subtitle}>
               Manage your profile and app settings.
-            </Text>
+            </Text> */}
           </View>
 
           <View
@@ -114,10 +114,10 @@ export default function AccountScreen() {
                 <Text style={styles.name}>{user?.name || "Medical Representative"}</Text>
                 <Text style={styles.role}>{roleText}</Text>
 
-                <View style={styles.activeBadge}>
+                {/* <View style={styles.activeBadge}>
                   <View style={styles.activeDot} />
                   <Text style={styles.activeText}>Active</Text>
-                </View>
+                </View> */}
               </View>
 
               {/* Personal Information */}
@@ -174,6 +174,41 @@ export default function AccountScreen() {
                 isTablet && styles.settingsColumnTablet,
               ]}
             >
+
+              {/* Admin Management Section */}
+              {isSuperAdmin && (
+                <>
+                  <Text style={styles.sectionTitle}>Administration</Text>
+
+                  <View style={styles.settingsCard}>
+                    <SettingsRow
+                      icon="account-group-outline"
+                      title="Manage Users"
+                      subtitle="View, ban, and create MR accounts"
+                      onPress={() => router.push("/admin/users")}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                      icon="account-plus-outline"
+                      title="MR Registrations"
+                      subtitle="Review and approve pending applications"
+                      onPress={() => router.push("/admin/registrations")}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                      icon="folder-open-outline"
+                      title="Document Library"
+                      subtitle="View and manage all uploaded documents"
+                      onPress={() => router.push("/document" as any)}
+                    />
+                  </View>
+                </>
+              )}
+
               <Text style={styles.sectionTitle}>Account Settings</Text>
 
               <View style={styles.settingsCard}>
@@ -181,7 +216,7 @@ export default function AccountScreen() {
                   icon="account-circle-outline"
                   title="Profile ID"
                   subtitle={user?.id || "—"}
-                  onPress={() => {}}
+                  onPress={() => { }}
                 />
 
                 <View style={styles.divider} />

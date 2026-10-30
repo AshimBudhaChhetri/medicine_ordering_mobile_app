@@ -36,7 +36,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="requests"
         options={{
-          title: "Requests",
+          title: "Orders",
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="clipboard-text-outline"

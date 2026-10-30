@@ -33,6 +33,7 @@ export type StockistContextType = {
   isLoading: boolean;
   error: string | null;
   refreshStockists: () => Promise<void>;
+  getStockistById: (id: string) => Promise<Stockist | undefined>;
   addStockist: (input: CreateStockistInput) => Promise<Stockist>;
   /** Compatible signature with previous mock implementation */
   addStockistRequest: (stockist: {
@@ -85,9 +86,32 @@ export function StockistProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, fetchStockists]);
 
+  const getStockistById = async (id: string): Promise<Stockist | undefined> => {
+    const existing = stockists.find((s) => s.id === id);
+    if (existing) {
+      return existing;
+    }
+    try {
+      const fetched = await stockistService.getStockist(id);
+      if (fetched) {
+        setStockists((prev) => {
+          if (prev.some((s) => s.id === fetched.id)) return prev;
+          return [fetched, ...prev];
+        });
+        return fetched;
+      }
+    } catch {
+      // Fallback
+    }
+    return undefined;
+  };
+
   const addStockist = async (input: CreateStockistInput): Promise<Stockist> => {
     const newStockist = await stockistService.createStockist(input);
-    setStockists((prev) => [newStockist, ...prev]);
+    setStockists((prev) => {
+      const filtered = prev.filter((s) => s.id !== newStockist.id);
+      return [newStockist, ...filtered];
+    });
     return newStockist;
   };
 
@@ -116,6 +140,7 @@ export function StockistProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         refreshStockists: fetchStockists,
+        getStockistById,
         addStockist,
         addStockistRequest,
       }}

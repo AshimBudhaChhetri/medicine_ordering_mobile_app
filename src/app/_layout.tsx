@@ -83,8 +83,24 @@ export default function RootLayout() {
             <Stack
               screenOptions={{
                 headerShown: false,
+                animation: "slide_from_right",
+                gestureEnabled: true,
+                gestureDirection: "horizontal",
               }}
-            />
+            >
+              <Stack.Screen name="index" options={{ animation: "none" }} />
+              <Stack.Screen name="login" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="(tabs)" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="request/[id]" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="stockist/[id]" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="stockist/add" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="product/add" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="document/upload" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="document/index" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="admin/users" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="admin/create-user" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="admin/registrations" options={{ animation: "slide_from_right" }} />
+            </Stack>
           </ProductProvider>
         </RequestProvider>
       </StockistProvider>

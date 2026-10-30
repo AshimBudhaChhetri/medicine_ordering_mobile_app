@@ -1,53 +1,123 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { API_BASE_URL } from "../../config/api";
+import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useResponsive } from "../../hooks/useResponsive";
+import { documentService } from "../../services/documentService";
 import { colors } from "../../theme/colors";
+import { DocumentItem } from "../../types/document";
 import { Order } from "../../types/order";
 
 export default function RequestDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { getOrderById } = useRequests();
+  const { isSuperAdmin } = useAuth();
+  const { getOrderById, approveOrder, rejectOrder } = useRequests();
   const { gutter, contentMaxWidth } = useResponsive();
 
   const [order, setOrder] = useState<Order | null>(null);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadOrder() {
-      if (!id) return;
-      setIsLoading(true);
-      try {
-        const found = await getOrderById(id);
-        if (isMounted) {
-          setOrder(found ?? null);
-        }
-      } catch {
-        if (isMounted) setOrder(null);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+  const loadData = useCallback(async () => {
+    if (!id) return;
+    try {
+      const [foundOrder, attachedDocs] = await Promise.all([
+        getOrderById(id),
+        documentService.getOrderDocuments(id).catch(() => []),
+      ]);
+      setOrder(foundOrder ?? null);
+      setDocuments(attachedDocs || []);
+    } catch {
+      setOrder(null);
+    } finally {
+      setIsLoading(false);
     }
-    loadOrder();
-    return () => {
-      isMounted = false;
-    };
   }, [id, getOrderById]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const handleApprove = () => {
+    if (!id) return;
+    Alert.alert(
+      "Approve Order",
+      `Are you sure you want to approve order ${order?.orderNo}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Approve",
+          onPress: async () => {
+            try {
+              setIsActionLoading(true);
+              const updated = await approveOrder(id);
+              setOrder(updated);
+              Alert.alert("Success", `Order ${updated.orderNo} has been approved.`);
+            } catch (err: any) {
+              Alert.alert("Approval Failed", err?.message || "Could not approve order.");
+            } finally {
+              setIsActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReject = () => {
+    if (!id) return;
+    Alert.prompt(
+      "Reject Order",
+      "Enter the reason for rejecting this order:",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reject",
+          style: "destructive",
+          onPress: async (reason?: string) => {
+            try {
+              setIsActionLoading(true);
+              const updated = await rejectOrder(id, reason || "Order rejected by administrator");
+              setOrder(updated);
+              Alert.alert("Success", `Order ${updated.orderNo} was rejected.`);
+            } catch (err: any) {
+              Alert.alert("Rejection Failed", err?.message || "Could not reject order.");
+            } finally {
+              setIsActionLoading(false);
+            }
+          },
+        },
+      ],
+      "plain-text",
+      "Credit limit exceeded or stock unavailable"
+    );
+  };
+
+  const handleOpenDoc = (url: string) => {
+    if (!url) return;
+    const fullUrl = url.startsWith("http")
+      ? url
+      : `${API_BASE_URL}${url.replace(/^\/api\/backend/, "")}`;
+    Linking.openURL(fullUrl).catch(() => {});
+  };
 
   if (isLoading) {
     return (
@@ -68,7 +138,7 @@ export default function RequestDetailsScreen() {
             size={48}
             color={colors.textMuted}
           />
-          <Text style={styles.notFoundTitle}>Request not found</Text>
+          <Text style={styles.notFoundTitle}>Order not found</Text>
           <Text style={styles.notFoundText}>
             This order may have been deleted or is not accessible.
           </Text>
@@ -92,6 +162,8 @@ export default function RequestDetailsScreen() {
     minute: "2-digit",
   });
 
+  const isPending = order.status.toLowerCase() === "pending";
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -104,13 +176,7 @@ export default function RequestDetailsScreen() {
         <View
           style={[
             styles.container,
-            contentMaxWidth
-              ? {
-                  width: "100%",
-                  maxWidth: 900,
-                  alignSelf: "center",
-                }
-              : undefined,
+            { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" },
           ]}
         >
           {/* Header */}
@@ -118,10 +184,11 @@ export default function RequestDetailsScreen() {
             <Pressable
               style={styles.backButton}
               onPress={() => router.back()}
+              hitSlop={8}
             >
               <MaterialCommunityIcons
                 name="arrow-left"
-                size={23}
+                size={22}
                 color={colors.text}
               />
             </Pressable>
@@ -134,7 +201,33 @@ export default function RequestDetailsScreen() {
             <StatusBadge status={order.status} />
           </View>
 
-          {/* Stockist Card */}
+          {/* Superadmin Action Buttons */}
+          {isSuperAdmin && isPending && (
+            <View style={styles.adminActionCard}>
+              <Text style={styles.adminActionHeading}>Superadmin Actions</Text>
+              <View style={styles.adminActionButtonsRow}>
+                <Pressable
+                  style={[styles.approveButton, isActionLoading && styles.btnDisabled]}
+                  onPress={handleApprove}
+                  disabled={isActionLoading}
+                >
+                  <MaterialCommunityIcons name="check-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.approveButtonText}>Approve Order</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.rejectButton, isActionLoading && styles.btnDisabled]}
+                  onPress={handleReject}
+                  disabled={isActionLoading}
+                >
+                  <MaterialCommunityIcons name="close-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.rejectButtonText}>Reject Order</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* Stockist Info */}
           <View style={styles.stockistCard}>
             <View style={styles.stockistIcon}>
               <MaterialCommunityIcons
@@ -143,55 +236,52 @@ export default function RequestDetailsScreen() {
                 color={colors.primary}
               />
             </View>
-
             <View style={styles.stockistInfo}>
-              <Text style={styles.label}>STOCKIST</Text>
-              <Text style={styles.stockistName}>{order.stockist?.name}</Text>
-              <Text style={styles.stockistLocation}>
-                {order.stockist?.location}
+              <Text style={styles.label}>Stockist / Pharmacy</Text>
+              <Text style={styles.stockistName}>
+                {order.stockist?.name || "Direct Order"}
               </Text>
+              {order.stockist?.location && (
+                <Text style={styles.stockistLocation}>
+                  {order.stockist.location}
+                </Text>
+              )}
             </View>
           </View>
 
-          {/* Order Information */}
-          <Text style={styles.sectionTitle}>Order Information</Text>
-
+          {/* Request Overview */}
+          <Text style={styles.sectionTitle}>Request Summary</Text>
           <View style={styles.infoCard}>
             <InfoRow
-              icon="calendar-outline"
-              label="Date Placed"
+              icon="calendar-clock"
+              label="Created Date"
               value={createdDate}
             />
-
             <View style={styles.divider} />
-
-            <InfoRow
-              icon="pill"
-              label="Total Line Items"
-              value={`${order.items.length} items (${order.totalQuantity} units)`}
-            />
-
-            <View style={styles.divider} />
-
             <InfoRow
               icon="account-outline"
-              label="Placed By"
+              label="Submitted By"
               value={order.createdBy?.name || "Medical Representative"}
             />
-
+            <View style={styles.divider} />
+            <InfoRow
+              icon="package-variant-closed"
+              label="Total Items / Units"
+              value={`${order.itemCount || order.items.length} line items (${order.totalQuantity} total units)`}
+            />
             {order.approvedBy && (
               <>
                 <View style={styles.divider} />
                 <InfoRow
-                  icon="check-circle-outline"
+                  icon="shield-check-outline"
                   label="Approved By"
-                  value={order.approvedBy.name}
+                  value={order.approvedBy.name || "Administrator"}
                 />
               </>
             )}
           </View>
 
-          {/* Rejection notice if rejected */}
+          {/* Rejection Notice */}
           {order.rejectionReason && (
             <View style={styles.rejectionCard}>
               <MaterialCommunityIcons
@@ -209,7 +299,7 @@ export default function RequestDetailsScreen() {
           )}
 
           {/* Requested Medicines */}
-          <Text style={styles.sectionTitle}>Requested Medicines</Text>
+          <Text style={styles.sectionTitle}>Ordered Medicines</Text>
 
           <View style={styles.medicineCard}>
             {order.items.map((item, index) => (
@@ -250,6 +340,67 @@ export default function RequestDetailsScreen() {
               Rs. {order.grandTotal.toFixed(2)}
             </Text>
           </View>
+
+          {/* Attached Documents Section */}
+          <View style={styles.docHeaderRow}>
+            <Text style={styles.sectionTitle}>Attached Documents</Text>
+            <Pressable
+              style={styles.attachDocButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/document/upload",
+                  params: { orderId: order.id, orderNo: order.orderNo },
+                })
+              }
+            >
+              <MaterialCommunityIcons name="plus" size={16} color={colors.primary} />
+              <Text style={styles.attachDocButtonText}>Attach Document</Text>
+            </Pressable>
+          </View>
+
+          {documents.length === 0 ? (
+            <View style={styles.emptyDocCard}>
+              <MaterialCommunityIcons
+                name="file-outline"
+                size={32}
+                color={colors.textMuted}
+              />
+              <Text style={styles.emptyDocText}>
+                No documents or invoices attached yet.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.docsListCard}>
+              {documents.map((doc, idx) => (
+                <View key={doc.id}>
+                  <Pressable
+                    style={styles.docRow}
+                    onPress={() => handleOpenDoc(doc.url)}
+                  >
+                    <MaterialCommunityIcons
+                      name="file-document-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.docItemName} numberOfLines={1}>
+                        {doc.name}
+                      </Text>
+                      <Text style={styles.docItemMeta}>
+                        Uploaded {new Date(doc.createdAt).toLocaleDateString("en-GB")}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons
+                      name="open-in-new"
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+                  {idx < documents.length - 1 && <View style={styles.divider} />}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -341,56 +492,111 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 22,
+    marginBottom: 20,
+    gap: 12,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: colors.card,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
   headerContent: {
     flex: 1,
   },
   pageTitle: {
-    fontSize: 22,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "500",
     color: colors.text,
   },
   requestNumber: {
     marginTop: 2,
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "400",
     color: colors.primary,
   },
   statusBadge: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   statusText: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
-  stockistCard: {
-    backgroundColor: colors.card,
+  adminActionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
-    padding: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  adminActionHeading: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+    marginBottom: 10,
+  },
+  adminActionButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  approveButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: colors.success,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  approveButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#FFFFFF",
+  },
+  rejectButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: colors.danger,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  rejectButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#FFFFFF",
+  },
+  btnDisabled: {
+    opacity: 0.6,
+  },
+  stockistCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
     flexDirection: "row",
     alignItems: "center",
   },
   stockistIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 15,
-    backgroundColor: colors.primarySoft,
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -400,52 +606,54 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    fontWeight: "500",
-    color: colors.textSecondary,
+    fontWeight: "400",
+    color: colors.textMuted,
   },
   stockistName: {
     marginTop: 2,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "500",
     color: colors.text,
   },
   stockistLocation: {
     marginTop: 2,
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontWeight: "400",
   },
   sectionTitle: {
-    marginTop: 24,
-    marginBottom: 11,
-    fontSize: 16,
-    fontWeight: "600",
+    marginTop: 20,
+    marginBottom: 10,
+    fontSize: 15,
+    fontWeight: "500",
     color: colors.text,
   },
   infoCard: {
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
-    paddingHorizontal: 15,
+    borderRadius: 12,
+    paddingHorizontal: 14,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   infoIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 11,
+    marginRight: 10,
   },
   infoLabel: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontWeight: "400",
   },
   infoValue: {
@@ -460,18 +668,18 @@ const styles = StyleSheet.create({
   },
   rejectionCard: {
     marginTop: 14,
-    backgroundColor: colors.dangerSoft,
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: 12,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
     borderWidth: 1,
-    borderColor: "#FECACA",
+    borderColor: colors.border,
   },
   rejectionTitle: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.danger,
   },
   rejectionText: {
@@ -481,50 +689,52 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   medicineCard: {
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
-    paddingHorizontal: 15,
+    borderRadius: 12,
+    paddingHorizontal: 14,
   },
   medicineRow: {
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
   },
   medicineIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   medicineInfo: {
     flex: 1,
-    marginLeft: 11,
+    marginLeft: 10,
   },
   medicineName: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
   medicineMeta: {
     marginTop: 2,
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontWeight: "400",
   },
   medicineAmount: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
   totalCard: {
     marginTop: 14,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -533,24 +743,85 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
   totalValue: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "500",
     color: colors.primary,
+  },
+  docHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  attachDocButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  attachDocButtonText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
+  },
+  emptyDocCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyDocText: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  docsListCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+  },
+  docRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 10,
+  },
+  docItemName: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+  },
+  docItemMeta: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: colors.textMuted,
+    marginTop: 2,
   },
   notFoundTitle: {
     marginTop: 12,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "500",
     color: colors.text,
   },
   notFoundText: {
     marginTop: 4,
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     textAlign: "center",
     fontWeight: "400",
   },
@@ -559,10 +830,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 11,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   backSimpleText: {
     color: "#FFFFFF",
-    fontWeight: "600",
+    fontWeight: "500",
   },
 });

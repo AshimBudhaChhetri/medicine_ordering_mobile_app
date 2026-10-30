@@ -259,7 +259,7 @@ export default function LoginScreen() {
                 <View>
                   <Text style={styles.logoTextCompact}>MediFlow</Text>
                   <Text style={styles.portalTextCompact}>
-                    Medical Representative Portal
+                    MR Portal
                   </Text>
                 </View>
               </View>
@@ -281,7 +281,7 @@ export default function LoginScreen() {
                 <Text style={styles.logoText}>MediFlow</Text>
 
                 <Text style={styles.portalText}>
-                  Medical Representative Portal
+                  MR Portal
                 </Text>
               </View>
             )}
