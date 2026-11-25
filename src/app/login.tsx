@@ -100,7 +100,7 @@ export default function LoginScreen() {
         password,
       });
 
-      router.replace("/(tabs)/home");
+      router.replace("/(tabs)/orders" as any);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 400) {

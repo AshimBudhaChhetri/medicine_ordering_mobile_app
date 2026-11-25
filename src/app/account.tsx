@@ -4,10 +4,10 @@ import { router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getMediaUrl } from "../../config/api";
-import { useAuth } from "../../context/AuthContext";
-import { useResponsive } from "../../hooks/useResponsive";
-import { colors } from "../../theme/colors";
+import { getMediaUrl } from "../config/api";
+import { useAuth } from "../context/AuthContext";
+import { useResponsive } from "../hooks/useResponsive";
+import { colors } from "../theme/colors";
 
 export default function AccountScreen() {
   const { user, logout, isSuperAdmin } = useAuth();
@@ -79,10 +79,24 @@ export default function AccountScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Account Settings</Text>
-            {/* <Text style={styles.subtitle}>
-              Manage your profile and app settings.
-            </Text> */}
+            <Pressable
+              style={styles.backButton}
+              onPress={() => router.back()}
+              hitSlop={8}
+            >
+              <MaterialCommunityIcons
+                name="arrow-left"
+                size={24}
+                color={colors.text}
+              />
+            </Pressable>
+
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Account Settings</Text>
+              <Text style={styles.subtitle}>
+                Manage your profile and app settings.
+              </Text>
+            </View>
           </View>
 
           <View
@@ -225,7 +239,7 @@ export default function AccountScreen() {
                   icon="bell-outline"
                   title="Notifications"
                   subtitle="Push notifications & alert preferences"
-                  onPress={() => router.push("/(tabs)/requests")}
+                  onPress={() => router.push("/(tabs)/notifications")}
                 />
               </View>
 
@@ -351,10 +365,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     marginBottom: 24,
   },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerText: {
+    flex: 1,
+  },
   title: {
-    fontSize: 27,
+    fontSize: 23,
     fontWeight: "600",
     color: colors.text,
   },

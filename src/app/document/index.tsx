@@ -2,7 +2,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Linking,
   Pressable,
@@ -20,6 +19,7 @@ import { documentService } from "../../services/documentService";
 import { colors } from "../../theme/colors";
 import { DocumentItem } from "../../types/document";
 import { API_BASE_URL } from "../../config/api";
+import { DocumentRowSkeleton } from "../../components/Skeleton";
 
 export default function DocumentListScreen() {
   const { isSuperAdmin } = useAuth();
@@ -168,23 +168,24 @@ export default function DocumentListScreen() {
           <MaterialCommunityIcons
             name="magnify"
             size={20}
-            color={colors.textMuted}
+            color="#9CA3AF"
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search documents by name..."
-            placeholderTextColor={colors.textMuted}
+            placeholder="Search"
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={loadDocuments}
             returnKeyType="search"
+            clearButtonMode="while-editing"
           />
           {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery("")}>
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
               <MaterialCommunityIcons
                 name="close-circle"
                 size={18}
-                color={colors.textMuted}
+                color="#9CA3AF"
               />
             </Pressable>
           ) : null}
@@ -192,8 +193,10 @@ export default function DocumentListScreen() {
 
         {/* List */}
         {isLoading && !isRefreshing ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.primary} />
+          <View style={styles.listContent}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <DocumentRowSkeleton key={index} />
+            ))}
           </View>
         ) : (
           <FlatList
@@ -293,20 +296,18 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 24,
     height: 44,
+    paddingHorizontal: 14,
     marginBottom: 16,
-    gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    marginLeft: 8,
+    fontSize: 15,
+    color: "#000000",
     fontWeight: "400",
-    color: colors.text,
   },
   centered: {
     flex: 1,

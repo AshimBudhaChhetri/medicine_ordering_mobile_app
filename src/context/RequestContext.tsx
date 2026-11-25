@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -13,6 +14,7 @@ import {
   Order,
   OrderQueryParams,
   OrderStatus,
+  OrderType,
 } from "../types/order";
 import { useAuth } from "./AuthContext";
 
@@ -30,8 +32,10 @@ export type MedicineRequestItem = {
 export interface MedicineRequestCompatibility {
   id: string;
   requestNumber: string;
+  orderType: OrderType;
   stockistId: string;
   stockistName: string;
+  toStockistName?: string;
   items: MedicineRequestItem[];
   totalItems: number;
   totalAmount: number;
@@ -74,8 +78,10 @@ function mapOrderToRequest(order: Order): MedicineRequestCompatibility {
   return {
     id: order.id,
     requestNumber: order.orderNo,
+    orderType: order.orderType,
     stockistId: order.stockist?.id || "",
     stockistName: order.stockist?.name || "Unknown Stockist",
+    toStockistName: order.toStockist?.name,
     items: order.items.map((item) => ({
       medicineId: item.productId || item.id,
       medicineName: item.productName,
@@ -102,13 +108,14 @@ export function RequestProvider({ children }: { children: ReactNode }) {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async (params?: OrderQueryParams) => {
     if (!isAuthenticated) {
       setOrders([]);
       setTotal(0);
+      setIsLoading(false);
       return;
     }
 
@@ -132,6 +139,7 @@ export function RequestProvider({ children }: { children: ReactNode }) {
     } else {
       setOrders([]);
       setTotal(0);
+      setIsLoading(false);
     }
   }, [isAuthenticated, fetchOrders]);
 
@@ -193,7 +201,10 @@ export function RequestProvider({ children }: { children: ReactNode }) {
     return createOrder(payload);
   };
 
-  const requests = orders.map(mapOrderToRequest);
+  const requests = useMemo(
+    () => orders.map(mapOrderToRequest),
+    [orders]
+  );
 
   return (
     <RequestContext.Provider

@@ -3,10 +3,10 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 
 import {
-  ActivityIndicator,
+  FlatList,
+  Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,13 +15,15 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApprovedStockistCard } from "../../components/ApprovedStockistCard";
+import { StockistCardSkeleton } from "../../components/Skeleton";
+import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
 export default function StockistsScreen() {
+  const { isSuperAdmin } = useAuth();
   const { stockists, isLoading, refreshStockists } = useStockists();
   const { requests, refreshOrders } = useRequests();
 
@@ -76,12 +78,95 @@ export default function StockistsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
+      <FlatList
+        key={isTablet ? "stockists-tablet" : "stockists-phone"}
+        data={filteredStockists}
+        keyExtractor={(item) => item.id}
+        numColumns={isTablet ? 2 : 1}
+        columnWrapperStyle={isTablet ? styles.stockistRow : undefined}
+        renderItem={({ item: stockist }) => {
+          const totalOrders = ordersCountMap[stockist.id] || 0;
+          const createdDate = stockist.createdAt
+            ? new Date(stockist.createdAt).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+            : undefined;
+
+          return (
+            <View
+              style={[
+                styles.stockistItem,
+                isTablet && styles.stockistItemTablet,
+              ]}
+            >
+              <Pressable
+                style={({ pressed }) => [
+                  styles.itemCard,
+                  pressed && { opacity: 0.88 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/stockist/[id]",
+                    params: { id: stockist.id },
+                  })
+                }
+              >
+                {/* Icon */}
+                <View style={styles.itemImageBox}>
+                  <MaterialCommunityIcons
+                    name="storefront-outline"
+                    size={26}
+                    color="#9CA3AF"
+                  />
+                </View>
+
+                {/* Info */}
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemTitle} numberOfLines={1}>
+                    {stockist.name}
+                  </Text>
+                  <Text style={styles.itemSubtitle} numberOfLines={1}>
+                    {stockist.location}
+                  </Text>
+                  {totalOrders > 0 && (
+                    <Text style={styles.itemMeta}>
+                      {totalOrders} {totalOrders === 1 ? "order" : "orders"} placed
+                    </Text>
+                  )}
+                </View>
+
+                {/* New Order shortcut */}
+                <Pressable
+                  style={styles.newOrderBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    router.push({
+                      pathname: "/(tabs)/new-request",
+                      params: { stockistId: stockist.id },
+                    });
+                  }}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons name="plus" size={18} color="#7a7a7aff" />
+                </Pressable>
+              </Pressable>
+            </View>
+          );
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.scrollContent,
           { paddingHorizontal: gutter },
+          contentMaxWidth
+            ? {
+              width: "100%",
+              maxWidth: contentMaxWidth,
+              alignSelf: "center",
+            }
+            : undefined,
         ]}
         refreshControl={
           <RefreshControl
@@ -90,133 +175,96 @@ export default function StockistsScreen() {
             tintColor={colors.primary}
           />
         }
-      >
-        <View
-          style={[
-            styles.container,
-            contentMaxWidth
-              ? {
-                width: "100%",
-                maxWidth: contentMaxWidth,
-                alignSelf: "center",
-              }
-              : undefined,
-          ]}
-        >
-          {/* HEADER */}
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>My Stockists</Text>
-              {/* <Text style={styles.subtitle}>
-                View and manage the pharmacies and stockists in your territory.
-              </Text> */}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === "android"}
+        ListHeaderComponent={
+          <View>
+            {/* HEADER */}
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>Stockists</Text>
+              </View>
+
+              {/* Tablet Add Button */}
+              {isTablet && isSuperAdmin && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.addButtonTablet,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => router.push("/stockist/add")}
+                >
+                  <MaterialCommunityIcons
+                    name="store-plus-outline"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.addButtonText}>Add Stockist</Text>
+                </Pressable>
+              )}
             </View>
 
-            {/* Tablet Add Button */}
-            {isTablet && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.addButtonTablet,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => router.push("/stockist/add")}
-              >
-                <MaterialCommunityIcons
-                  name="store-plus-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.addButtonText}>Add Stockist</Text>
-              </Pressable>
-            )}
-          </View>
+            {/* SEARCH */}
+            <View style={styles.searchBar}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={20}
+                color="#9CA3AF"
+              />
 
-          {/* SEARCH */}
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={21}
-              color={colors.textMuted}
-            />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search"
+                placeholderTextColor="#9CA3AF"
+                style={styles.searchInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
 
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search stockists by name or location..."
-              placeholderTextColor={colors.textMuted}
-              style={styles.searchInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch("")} hitSlop={10}>
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={19}
-                  color={colors.textMuted}
-                />
-              </Pressable>
-            )}
-          </View>
-
-          {/* LIST HEADER */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>Registered Stockists</Text>
-            <Text style={styles.sectionCount}>{filteredStockists.length}</Text>
-          </View>
-
-          {/* LOADING STATE */}
-          {isLoading && !isRefreshing && stockists.length === 0 ? (
-            <View style={{ paddingVertical: 40, alignItems: "center" }}>
-              <ActivityIndicator size="small" color={colors.primary} />
+              {search.length > 0 && (
+                <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                </Pressable>
+              )}
             </View>
-          ) : filteredStockists.length > 0 ? (
+
+            {/* LIST HEADER */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Registered Stockists</Text>
+              <Text style={styles.sectionCount}>
+                {filteredStockists.length}
+              </Text>
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          isLoading && !isRefreshing && stockists.length === 0 ? (
             <View
               style={[
                 styles.cardGrid,
                 isTablet ? styles.cardGridTablet : undefined,
               ]}
             >
-              {filteredStockists.map((stockist) => {
-                const totalOrders = ordersCountMap[stockist.id] || 0;
-                const createdDate = stockist.createdAt
-                  ? new Date(stockist.createdAt).toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })
-                  : undefined;
-
-                return (
-                  <View
-                    key={stockist.id}
-                    style={[
-                      styles.cardWrapper,
-                      isTablet ? styles.cardWrapperTablet : undefined,
-                    ]}
-                  >
-                    <ApprovedStockistCard
-                      name={stockist.name}
-                      location={stockist.location}
-                      totalOrders={totalOrders}
-                      createdDate={createdDate}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/stockist/[id]",
-                          params: { id: stockist.id },
-                        })
-                      }
-                      onNewRequest={() =>
-                        router.push({
-                          pathname: "/(tabs)/new-request",
-                          params: { stockistId: stockist.id },
-                        })
-                      }
-                    />
-                  </View>
-                );
-              })}
+              {Array.from({ length: 4 }).map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.cardWrapper,
+                    isTablet ? styles.cardWrapperTablet : undefined,
+                  ]}
+                >
+                  <StockistCardSkeleton />
+                </View>
+              ))}
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -232,25 +280,29 @@ export default function StockistsScreen() {
               <Text style={styles.emptyText}>
                 {search.trim().length > 0
                   ? "Try using a different search term."
-                  : "Add your first stockist to start placing orders."}
+                  : isSuperAdmin
+                    ? "Add your first stockist to start placing orders."
+                    : "No stockists have been assigned to your areas yet."}
               </Text>
 
-              <Pressable
-                style={styles.emptyAddButton}
-                onPress={() => router.push("/stockist/add")}
-              >
-                <MaterialCommunityIcons
-                  name="plus"
-                  size={18}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.emptyAddText}>Add Stockist</Text>
-              </Pressable>
+              {isSuperAdmin && (
+                <Pressable
+                  style={styles.emptyAddButton}
+                  onPress={() => router.push("/stockist/add")}
+                >
+                  <MaterialCommunityIcons
+                    name="plus"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.emptyAddText}>Add Stockist</Text>
+                </Pressable>
+              )}
             </View>
-          )}
-
-          {/* MOBILE ADD STOCKIST BUTTON */}
-          {!isTablet && (
+          )
+        }
+        ListFooterComponent={
+          !isTablet && isSuperAdmin ? (
             <Pressable
               style={({ pressed }) => [
                 styles.addButton,
@@ -265,9 +317,9 @@ export default function StockistsScreen() {
               />
               <Text style={styles.addButtonText}>Add New Stockist</Text>
             </Pressable>
-          )}
-        </View>
-      </ScrollView>
+          ) : null
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -275,7 +327,7 @@ export default function StockistsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#FFFFFF",
   },
   scrollContent: {
     flexGrow: 1,
@@ -296,8 +348,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: "600",
-    color: colors.text,
+    fontWeight: "500",
+    color: "#000000",
   },
   subtitle: {
     marginTop: 4,
@@ -332,23 +384,22 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.85,
   },
-  searchContainer: {
+  searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 24,
+    height: 44,
     paddingHorizontal: 14,
-    minHeight: 48,
+    marginTop: 14,
     marginBottom: 16,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 9,
-    fontSize: 14,
-    color: colors.text,
-    paddingVertical: 0,
+    marginLeft: 8,
+    fontSize: 15,
+    color: "#000000",
+    fontWeight: "400",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -384,6 +435,67 @@ const styles = StyleSheet.create({
   cardWrapperTablet: {
     width: "48%",
   },
+  stockistRow: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  stockistItem: {
+    width: "100%",
+    marginBottom: 10,
+  },
+  stockistItemTablet: {
+    flex: 1,
+    width: undefined,
+    marginBottom: 0,
+  },
+  itemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    overflow: "hidden",
+    minHeight: 68,
+  },
+  itemImageBox: {
+    width: 68,
+    alignSelf: "stretch",
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemInfo: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "center",
+  },
+  itemTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#000000",
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    fontWeight: "300",
+    color: "#000000",
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  itemMeta: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: "#2563EB",
+    marginTop: 3,
+  },
+  newOrderBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 6,
+    backgroundColor: "#e4e4e4ff",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
   emptyState: {
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -404,8 +516,8 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
+    fontWeight: "500",
+    color: "#000000",
   },
   emptyText: {
     fontSize: 13,

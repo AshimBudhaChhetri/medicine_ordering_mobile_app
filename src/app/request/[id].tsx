@@ -2,7 +2,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Pressable,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { API_BASE_URL } from "../../config/api";
+import { DetailSkeleton } from "../../components/Skeleton";
 import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useResponsive } from "../../hooks/useResponsive";
@@ -122,8 +122,13 @@ export default function RequestDetailsScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View
+          style={[
+            styles.skeletonContainer,
+            { paddingHorizontal: gutter, maxWidth: contentMaxWidth },
+          ]}
+        >
+          <DetailSkeleton />
         </View>
       </SafeAreaView>
     );
@@ -163,6 +168,7 @@ export default function RequestDetailsScreen() {
   });
 
   const isPending = order.status.toLowerCase() === "pending";
+  const isTransfer = order.orderType === "STOCKIST_TRANSFER";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -237,7 +243,9 @@ export default function RequestDetailsScreen() {
               />
             </View>
             <View style={styles.stockistInfo}>
-              <Text style={styles.label}>Stockist / Pharmacy</Text>
+              <Text style={styles.label}>
+                {isTransfer ? "From Stockist" : "Stockist / Pharmacy"}
+              </Text>
               <Text style={styles.stockistName}>
                 {order.stockist?.name || "Direct Order"}
               </Text>
@@ -249,9 +257,38 @@ export default function RequestDetailsScreen() {
             </View>
           </View>
 
+          {isTransfer && order.toStockist && (
+            <View style={[styles.stockistCard, styles.stockistCardSpaced]}>
+              <View style={styles.stockistIcon}>
+                <MaterialCommunityIcons
+                  name="swap-horizontal"
+                  size={26}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={styles.stockistInfo}>
+                <Text style={styles.label}>To Stockist</Text>
+                <Text style={styles.stockistName}>
+                  {order.toStockist.name}
+                </Text>
+                {order.toStockist.location && (
+                  <Text style={styles.stockistLocation}>
+                    {order.toStockist.location}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Request Overview */}
           <Text style={styles.sectionTitle}>Request Summary</Text>
           <View style={styles.infoCard}>
+            <InfoRow
+              icon={isTransfer ? "swap-horizontal" : "cart-outline"}
+              label="Order Type"
+              value={isTransfer ? "Stockist Transfer" : "Dealer Order"}
+            />
+            <View style={styles.divider} />
             <InfoRow
               icon="calendar-clock"
               label="Created Date"
@@ -489,6 +526,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 30,
   },
+  skeletonContainer: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "center",
+    paddingTop: 16,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -589,6 +632,9 @@ const styles = StyleSheet.create({
     padding: 14,
     flexDirection: "row",
     alignItems: "center",
+  },
+  stockistCardSpaced: {
+    marginTop: 10,
   },
   stockistIcon: {
     width: 44,

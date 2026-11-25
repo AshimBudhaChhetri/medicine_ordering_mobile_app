@@ -5,6 +5,9 @@ import {
   Order,
   OrderListResponse,
   OrderQueryParams,
+  OrderRemarkInput,
+  OrderTimelineItem,
+  OrderTimelineRemark,
 } from "../types/order";
 
 export const orderService = {
@@ -87,6 +90,61 @@ export const orderService = {
     return apiRequest<Order>(API_ENDPOINTS.orders.reject(id), {
       method: "PATCH",
       body: reason ? { reason } : {},
+    });
+  },
+
+  /**
+   * Fetch the comment/approval/document timeline for an order.
+   */
+  async getOrderTimeline(id: string): Promise<OrderTimelineItem[]> {
+    return apiRequest<OrderTimelineItem[]>(
+      API_ENDPOINTS.orders.timeline(id),
+      { method: "GET" }
+    );
+  },
+
+  /**
+   * Fetch only the top-level remarks for an order.
+   */
+  async getOrderRemarks(id: string): Promise<OrderTimelineRemark[]> {
+    return apiRequest<OrderTimelineRemark[]>(
+      API_ENDPOINTS.orders.remarks(id),
+      { method: "GET" }
+    );
+  },
+
+  /**
+   * Post a comment (optionally a reply or with attached documents).
+   */
+  async addOrderRemark(
+    id: string,
+    input: OrderRemarkInput
+  ): Promise<Order> {
+    return apiRequest<Order>(API_ENDPOINTS.orders.remarks(id), {
+      method: "POST",
+      body: input,
+    });
+  },
+
+  /**
+   * Edit the text of an existing remark (author or superadmin only).
+   */
+  async updateOrderRemark(
+    remarkId: string,
+    content: string
+  ): Promise<Order> {
+    return apiRequest<Order>(API_ENDPOINTS.orders.remark(remarkId), {
+      method: "PATCH",
+      body: { content },
+    });
+  },
+
+  /**
+   * Soft-delete a remark (author or superadmin only).
+   */
+  async deleteOrderRemark(remarkId: string): Promise<void> {
+    await apiRequest(API_ENDPOINTS.orders.remark(remarkId), {
+      method: "DELETE",
     });
   },
 };

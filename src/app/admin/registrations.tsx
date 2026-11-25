@@ -2,7 +2,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -17,6 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { apiRequest } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
+import { RegistrationCardSkeleton } from "../../components/Skeleton";
 import { colors } from "../../theme/colors";
 
 interface RegistrationItem {
@@ -242,8 +242,10 @@ export default function AdminRegistrationsScreen() {
         </View>
 
         {isLoading && !isRefreshing ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.primary} />
+          <View style={styles.listContent}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <RegistrationCardSkeleton key={index} />
+            ))}
           </View>
         ) : (
           <FlatList

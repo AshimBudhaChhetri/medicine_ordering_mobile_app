@@ -1,11 +1,15 @@
 import * as Device from "expo-device";
 import Constants from "expo-constants";
-import * as SecureStore from "expo-secure-store";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
 
 import { apiRequest } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import {
+  deleteItemAsync,
+  getItemAsync,
+  setItemAsync,
+} from "../storage/secureStorage";
 import {
   NotificationItem,
   NotificationListResponse,
@@ -13,6 +17,30 @@ import {
 } from "../types/notification";
 
 const PUSH_TOKEN_KEY = "mediflow_expo_push_token";
+
+type UnreadBadgeListener = (count: number) => void;
+
+const unreadBadgeListeners = new Set<UnreadBadgeListener>();
+
+let unreadBadgeCount = 0;
+
+export function getUnreadBadgeCount(): number {
+  return unreadBadgeCount;
+}
+
+export function setUnreadBadgeCount(count: number): void {
+  unreadBadgeCount = Math.max(0, count);
+  unreadBadgeListeners.forEach((listener) => listener(unreadBadgeCount));
+}
+
+export function subscribeUnreadBadge(listener: UnreadBadgeListener): () => void {
+  unreadBadgeListeners.add(listener);
+  listener(unreadBadgeCount);
+
+  return () => {
+    unreadBadgeListeners.delete(listener);
+  };
+}
 
 function projectId(): string | undefined {
   return (
@@ -102,6 +130,10 @@ export async function registerForPushNotifications(): Promise<void> {
       projectId: id,
     });
 
+    if (__DEV__) {
+      console.log("[push] Expo push token:", token);
+    }
+
     await apiRequest(API_ENDPOINTS.notifications.registerToken, {
       method: "POST",
       body: {
@@ -110,7 +142,7 @@ export async function registerForPushNotifications(): Promise<void> {
       },
     });
 
-    await SecureStore.setItemAsync(PUSH_TOKEN_KEY, token);
+    await setItemAsync(PUSH_TOKEN_KEY, token);
   } catch (error) {
     console.warn("registerForPushNotifications skipped:", error);
   }
@@ -121,7 +153,7 @@ export async function registerForPushNotifications(): Promise<void> {
  */
 export async function unregisterPushToken(): Promise<void> {
   try {
-    const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+    const token = await getItemAsync(PUSH_TOKEN_KEY);
     if (!token) {
       return;
     }
@@ -132,7 +164,7 @@ export async function unregisterPushToken(): Promise<void> {
         body: { token },
       });
     } finally {
-      await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
+      await deleteItemAsync(PUSH_TOKEN_KEY);
     }
   } catch (error) {
     console.warn("unregisterPushToken skipped:", error);
@@ -152,7 +184,17 @@ export function notificationRoute(
     };
   }
 
-  if (data.type === "REGISTRATION_APPROVED") {
+  if (typeof data.productId === "string" && data.productId.length > 0) {
+    return "/(tabs)/home";
+  }
+
+  if (
+    data.type === "PRODUCT_CREATED" ||
+    data.type === "PRODUCT_UPDATED" ||
+    data.type === "PRODUCT_TYPE_CREATED" ||
+    data.type === "PRODUCT_TYPE_UPDATED" ||
+    data.type === "REGISTRATION_APPROVED"
+  ) {
     return "/(tabs)/home";
   }
 

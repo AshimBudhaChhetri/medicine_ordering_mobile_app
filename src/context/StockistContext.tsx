@@ -56,12 +56,13 @@ export function StockistProvider({ children }: { children: ReactNode }) {
 
   const [stockists, setStockists] = useState<Stockist[]>([]);
   const [approvalRequests] = useState<StockistApprovalRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStockists = useCallback(async () => {
     if (!isAuthenticated) {
       setStockists([]);
+      setIsLoading(false);
       return;
     }
 
@@ -83,6 +84,7 @@ export function StockistProvider({ children }: { children: ReactNode }) {
       fetchStockists();
     } else {
       setStockists([]);
+      setIsLoading(false);
     }
   }, [isAuthenticated, fetchStockists]);
 

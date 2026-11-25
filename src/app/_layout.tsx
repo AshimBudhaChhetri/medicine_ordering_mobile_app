@@ -91,6 +91,7 @@ export default function RootLayout() {
               <Stack.Screen name="index" options={{ animation: "none" }} />
               <Stack.Screen name="login" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="(tabs)" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="request/[id]" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="stockist/[id]" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="stockist/add" options={{ animation: "slide_from_right" }} />

@@ -2,7 +2,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -18,6 +17,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { apiRequest } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
+import { ListRowSkeleton } from "../../components/Skeleton";
 import { colors } from "../../theme/colors";
 import { AuthUser } from "../../types/auth";
 
@@ -182,26 +182,29 @@ export default function AdminUsersScreen() {
 
         {/* Search */}
         <View style={styles.searchBar}>
-          <MaterialCommunityIcons name="magnify" size={20} color={colors.textMuted} />
+          <MaterialCommunityIcons name="magnify" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by name or email..."
-            placeholderTextColor={colors.textMuted}
+            placeholder="Search"
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={loadUsers}
             returnKeyType="search"
+            clearButtonMode="while-editing"
           />
           {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery("")}>
-              <MaterialCommunityIcons name="close-circle" size={18} color={colors.textMuted} />
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <MaterialCommunityIcons name="close-circle" size={18} color="#9CA3AF" />
             </Pressable>
           ) : null}
         </View>
 
         {isLoading && !isRefreshing ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={colors.primary} />
+          <View style={styles.listContent}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <ListRowSkeleton key={index} />
+            ))}
           </View>
         ) : (
           <FlatList
@@ -249,11 +252,21 @@ const styles = StyleSheet.create({
   },
   createButtonText: { fontSize: 13, fontWeight: "500", color: "#FFFFFF" },
   searchBar: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF",
-    borderRadius: 8, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 12, height: 44, marginBottom: 16, gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 24,
+    height: 44,
+    paddingHorizontal: 14,
+    marginBottom: 16,
   },
-  searchInput: { flex: 1, fontSize: 14, fontWeight: "400", color: colors.text },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 15,
+    color: "#000000",
+    fontWeight: "400",
+  },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { paddingBottom: 24, gap: 10 },
   userCard: {

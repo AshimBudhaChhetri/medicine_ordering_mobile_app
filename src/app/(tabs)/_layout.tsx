@@ -1,145 +1,263 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { Image } from "expo-image";
 import { Tabs } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors } from "../../theme/colors";
+import { getMediaUrl } from "../../config/api";
+import { useAuth } from "../../context/AuthContext";
+
+interface TabBarButtonProps {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  accessibilityLabel: string;
+  props: any;
+}
+
+function TabBarButton({ icon, accessibilityLabel, props }: TabBarButtonProps) {
+  const selected = Boolean(props.accessibilityState?.selected);
+
+  return (
+    <Pressable
+      onPress={props.onPress}
+      onLongPress={props.onLongPress}
+      accessibilityRole="button"
+      accessibilityState={props.accessibilityState}
+      accessibilityLabel={accessibilityLabel}
+      android_ripple={null}
+      style={styles.tabItemPressable}
+    >
+      <View style={[styles.iconContainer, selected && styles.iconContainerActive]}>
+        <MaterialCommunityIcons
+          name={icon}
+          size={26}
+          color="#000000"
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function ProfileTabButton({ props }: { props: any }) {
+  const { user } = useAuth();
+  const selected = Boolean(props.accessibilityState?.selected);
+  const avatarUrl = getMediaUrl(user?.image);
+
+  const initials = (user?.name || "MR")
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <Pressable
+      onPress={props.onPress}
+      onLongPress={props.onLongPress}
+      accessibilityRole="button"
+      accessibilityState={props.accessibilityState}
+      accessibilityLabel="Profile"
+      android_ripple={null}
+      style={styles.tabItemPressable}
+    >
+      <View
+        style={[
+          styles.profileAvatarRing,
+          selected && styles.profileAvatarRingActive,
+        ]}
+      >
+        {avatarUrl ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            style={styles.profileAvatarImage}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={styles.profileAvatarPlaceholder}>
+            <Text style={styles.profileAvatarInitials}>{initials}</Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+}
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Tabs
-      initialRouteName="home"
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarHideOnKeyboard: true,
-      }}
-    >
-      {/* HOME */}
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="home-outline"
-              color={color}
-              size={size}
-            />
-          ),
+    <View style={styles.rootContainer}>
+      <Tabs
+        initialRouteName="orders"
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarStyle: [
+            styles.tabBar,
+            { height: 64 + insets.bottom, paddingBottom: insets.bottom || 8 },
+          ],
+          tabBarHideOnKeyboard: true,
         }}
-      />
+      >
+        {/* 1. ORDERS */}
+        <Tabs.Screen
+          name="orders"
+          options={{
+            title: "Orders",
+            tabBarButton: (props) => (
+              <TabBarButton
+                icon="history"
+                accessibilityLabel="Orders"
+                props={props}
+              />
+            ),
+          }}
+        />
 
-      {/* REQUESTS */}
-      <Tabs.Screen
-        name="requests"
-        options={{
-          title: "Orders",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="clipboard-text-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
+        {/* 2. STOCKISTS */}
+        <Tabs.Screen
+          name="stockists"
+          options={{
+            title: "Stockists",
+            tabBarButton: (props) => (
+              <TabBarButton
+                icon="package-variant-closed"
+                accessibilityLabel="Stockists"
+                props={props}
+              />
+            ),
+          }}
+        />
 
-      {/* NEW REQUEST */}
-      <Tabs.Screen
-        name="new-request"
-        options={{
-          title: "",
-          tabBarButton: (props) => (
-            <View style={styles.centerWrapper}>
-              <Pressable
-                onPress={props.onPress}
-                style={({ pressed }) => [
-                  styles.newRequestButton,
-                  pressed && styles.newRequestPressed,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="plus"
-                  size={30}
-                  color="#FFFFFF"
-                />
-              </Pressable>
-            </View>
-          ),
-        }}
-      />
+        {/* 3. PRODUCTS */}
+        <Tabs.Screen
+          name="products"
+          options={{
+            title: "Products",
+            tabBarButton: (props) => (
+              <TabBarButton
+                icon="pill"
+                accessibilityLabel="Products"
+                props={props}
+              />
+            ),
+          }}
+        />
 
-      {/* STOCKISTS */}
-      <Tabs.Screen
-        name="stockists"
-        options={{
-          title: "Stockists",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="storefront-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
+        {/* 4. MESSAGING */}
+        <Tabs.Screen
+          name="messaging"
+          options={{
+            title: "Messaging",
+            tabBarButton: (props) => (
+              <TabBarButton
+                icon="chat-outline"
+                accessibilityLabel="Messaging"
+                props={props}
+              />
+            ),
+          }}
+        />
 
-      {/* ACCOUNT */}
-      <Tabs.Screen
-        name="account"
-        options={{
-          title: "Account",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="account-outline"
-              color={color}
-              size={size}
-            />
-          ),
-        }}
-      />
-    </Tabs>
+        {/* 5. PROFILE */}
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarButton: (props) => <ProfileTabButton props={props} />,
+          }}
+        />
+
+        {/* HIDDEN AUXILIARY ROUTES */}
+        <Tabs.Screen
+          name="requests"
+          options={{
+            href: null,
+          }}
+        />
+
+        <Tabs.Screen
+          name="home"
+          options={{
+            href: null,
+          }}
+        />
+
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            href: null,
+          }}
+        />
+
+        <Tabs.Screen
+          name="new-request"
+          options={{
+            href: null,
+          }}
+        />
+      </Tabs>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
   tabBar: {
-    height: 76,
-    paddingTop: 8,
-    paddingBottom: 8,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 8,
+    elevation: 0,
+    shadowOpacity: 0,
   },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: "500",
-  },
-  centerWrapper: {
+  tabItemPressable: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  newRequestButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: colors.primary,
-    justifyContent: "center",
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
-    marginTop: -22,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  newRequestPressed: {
-    opacity: 0.85,
-    transform: [
-      {
-        scale: 0.94,
-      },
-    ],
+  iconContainerActive: {
+    backgroundColor: "#BFDBFE",
+  },
+  /* Profile avatar tab button */
+  profileAvatarRing: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileAvatarRingActive: {
+    borderColor: "#2563EB",
+  },
+  profileAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  profileAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileAvatarInitials: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#FFFFFF",
   },
 });

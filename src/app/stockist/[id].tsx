@@ -2,7 +2,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { DetailSkeleton } from "../../components/Skeleton";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
@@ -84,9 +84,13 @@ export default function StockistDetailsScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading stockist details...</Text>
+        <View
+          style={[
+            styles.skeletonContainer,
+            { paddingHorizontal: gutter, maxWidth: contentMaxWidth },
+          ]}
+        >
+          <DetailSkeleton />
         </View>
       </SafeAreaView>
     );
@@ -358,6 +362,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
+  },
+  skeletonContainer: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "center",
+    paddingTop: 16,
   },
   loadingText: {
     fontSize: 14,

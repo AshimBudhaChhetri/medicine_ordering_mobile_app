@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
@@ -14,42 +15,55 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { PendingStatCard } from "../../components/PendingStatCard";
 import { RequestCard } from "../../components/RequestCard";
+import {
+  OrderCardSkeleton,
+  PendingStatCardSkeleton,
+  StatCardSkeleton,
+  StockistRowSkeleton,
+} from "../../components/Skeleton";
 import { StatCard } from "../../components/StatCard";
 import { StockistCard } from "../../components/StockistCard";
 
+import { getMediaUrl } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { dashboardService } from "../../services/dashboardService";
-import { notificationService } from "../../services/notificationService";
 import { colors } from "../../theme/colors";
 import { DashboardStats } from "../../types/dashboard";
 
 export default function DashboardScreen() {
   const { user, isSuperAdmin } = useAuth();
-  const { requests, refreshOrders } = useRequests();
-  const { stockists, refreshStockists } = useStockists();
+  const {
+    requests,
+    refreshOrders,
+    isLoading: isOrdersLoading,
+  } = useRequests();
+  const {
+    stockists,
+    refreshStockists,
+    isLoading: isStockistsLoading,
+  } = useStockists();
 
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadDashboardData = useCallback(async () => {
     try {
-      const [statsData, unread] = await Promise.all([
-        dashboardService.getStats().catch(() => null),
-        notificationService.getUnreadCount().catch(() => 0),
-      ]);
+      const statsData = await dashboardService.getStats().catch(() => null);
       if (statsData) {
         setStats(statsData);
       }
-      setUnreadCount(unread);
     } catch (err) {
       console.warn("Failed to load dashboard analytical stats:", err);
+    } finally {
+      setIsStatsLoading(false);
     }
   }, []);
 
@@ -92,10 +106,18 @@ export default function DashboardScreen() {
     user?.role === "MR"
       ? "Medical Representative"
       : user?.role === "MR-head"
-      ? "Branch Head"
-      : user?.role === "superadmin"
-      ? "Super Administrator"
-      : "Staff";
+        ? "Branch Head"
+        : user?.role === "superadmin"
+          ? "Super Administrator"
+          : "Staff";
+
+  const avatarUrl = getMediaUrl(user?.image);
+  const initials = (user?.name || "MR")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -120,33 +142,41 @@ export default function DashboardScreen() {
             styles.container,
             contentMaxWidth
               ? {
-                  maxWidth: contentMaxWidth,
-                  alignSelf: "center",
-                  width: "100%",
-                }
+                maxWidth: contentMaxWidth,
+                alignSelf: "center",
+                width: "100%",
+              }
               : undefined,
           ]}
         >
           {/* HEADER */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.name}>{user?.name || "User"}</Text>
+              {/* <Text style={styles.name}>{user?.name || "User"}</Text> */}
+              <Text style={styles.name}>MediFlow</Text>
               <Text style={styles.role}>{roleLabel}</Text>
             </View>
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open account settings"
               style={({ pressed }) => [
-                styles.notificationButton,
+                styles.accountButton,
                 pressed && styles.buttonPressed,
               ]}
-              onPress={() => router.push("/(tabs)/requests")}
+              onPress={() => router.push("/account")}
             >
-              <MaterialCommunityIcons
-                name="bell-outline"
-                size={23}
-                color={colors.text}
-              />
-              {unreadCount > 0 && <View style={styles.notificationDot} />}
+              {avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.accountAvatar}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.accountAvatarFallback}>
+                  <Text style={styles.accountInitials}>{initials}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
@@ -214,7 +244,6 @@ export default function DashboardScreen() {
           {/* SUPERADMIN MANAGEMENT SHORTCUTS */}
           {isSuperAdmin && (
             <View style={styles.adminShortcutsCard}>
-              <Text style={styles.adminShortcutsTitle}>Admin Management</Text>
               <View style={styles.adminShortcutsRow}>
                 <Pressable
                   style={styles.adminShortcutItem}
@@ -278,54 +307,75 @@ export default function DashboardScreen() {
 
 
           {/* OVERVIEW STATS */}
-          <Text style={styles.sectionTitle}>Overview</Text>
 
           <View style={styles.statsGrid}>
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Pending Orders"
-                value={stats?.pendingOrders ?? pendingRequests.length}
-                icon="clock-outline"
-                tone="orange"
-              />
-            </View>
+            {isStatsLoading && !stats ? (
+              <>
+                <View style={styles.fullWidth}>
+                  <PendingStatCardSkeleton />
+                </View>
 
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Completed Orders"
-                value={completedRequests.length}
-                icon="check-circle-outline"
-                tone="green"
-              />
-            </View>
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
 
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Total Orders"
-                value={stats?.totalOrders ?? requests.length}
-                icon="receipt-text-outline"
-                tone="blue"
-              />
-            </View>
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
 
-            {isSuperAdmin ? (
-              <View style={styles.statWrapper}>
-                <StatCard
-                  title="Total Users"
-                  value={stats?.totalUsers ?? 0}
-                  icon="account-group-outline"
-                  tone="purple"
-                />
-              </View>
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
+              </>
             ) : (
-              <View style={styles.statWrapper}>
-                <StatCard
-                  title="My Stockists"
-                  value={stockists.length}
-                  icon="storefront-outline"
-                  tone="purple"
-                />
-              </View>
+              <>
+                <View style={styles.fullWidth}>
+                  <PendingStatCard
+                    title="Pending Orders"
+                    value={stats?.pendingOrders ?? pendingRequests.length}
+                    icon="clock-outline"
+                    onPress={() => router.push("/(tabs)/requests")}
+                  />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCard
+                    title="Orders Approved"
+                    value={completedRequests.length}
+                    icon="check-circle"
+                    tone="green"
+                  />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCard
+                    title="Total Orders"
+                    value={stats?.totalOrders ?? requests.length}
+                    icon="receipt-text-outline"
+                    tone="blue"
+                  />
+                </View>
+
+                {isSuperAdmin ? (
+                  <View style={styles.statWrapper}>
+                    <StatCard
+                      title="Total Users"
+                      value={stats?.totalUsers ?? 0}
+                      icon="account-group-outline"
+                      tone="purple"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.statWrapper}>
+                    <StatCard
+                      title="My Stockists"
+                      value={stockists.length}
+                      icon="storefront-outline"
+                      tone="purple"
+                    />
+                  </View>
+                )}
+              </>
             )}
           </View>
 
@@ -346,7 +396,13 @@ export default function DashboardScreen() {
                 </Pressable>
               </View>
 
-              {recentRequests.length > 0 ? (
+              {isOrdersLoading && requests.length === 0 ? (
+                <>
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <OrderCardSkeleton key={index} />
+                  ))}
+                </>
+              ) : recentRequests.length > 0 ? (
                 recentRequests.map((request) => (
                   <Pressable
                     key={request.id}
@@ -394,7 +450,13 @@ export default function DashboardScreen() {
                   </Pressable>
                 </View>
 
-                {recentStockists.length > 0 ? (
+                {isStockistsLoading && stockists.length === 0 ? (
+                  <>
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <StockistRowSkeleton key={index} />
+                    ))}
+                  </>
+                ) : recentStockists.length > 0 ? (
                   recentStockists.map((stockist) => (
                     <Pressable
                       key={stockist.id}
@@ -465,25 +527,34 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: "400",
   },
-  notificationButton: {
+  accountButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: 22,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
+    overflow: "hidden",
   },
-  notificationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.danger,
-    position: "absolute",
-    top: 11,
-    right: 12,
+  accountAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  accountAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accountInitials: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   hero: {
     backgroundColor: "transparent",
@@ -509,7 +580,7 @@ const styles = StyleSheet.create({
   },
   heroButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: 9999,
     paddingVertical: 10,
     paddingHorizontal: 16,
     flexDirection: "row",
@@ -518,7 +589,7 @@ const styles = StyleSheet.create({
   },
   heroSecondaryButton: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 8,
+    borderRadius: 9999,
     paddingVertical: 10,
     paddingHorizontal: 16,
     flexDirection: "row",
@@ -542,11 +613,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   adminShortcutsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
     marginBottom: 16,
   },
   adminShortcutsTitle: {
@@ -557,19 +625,19 @@ const styles = StyleSheet.create({
   },
   adminShortcutsRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
   },
   adminShortcutItem: {
     alignItems: "center",
     gap: 6,
   },
   adminShortcutIcon: {
-    width: 48,
-    height: 48,
+    backgroundColor: "#FFFFFF",
+    width: 68,
+    height: 68,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -609,10 +677,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 20,
   },
+  fullWidth: {
+    width: "100%",
+  },
   statWrapper: {
-    minWidth: 140,
-    flexGrow: 1,
-    flexBasis: "47%",
+    minWidth: "30%",
+    maxWidth: "30%",
+    flex: 1,
   },
   dashboardContent: {
     gap: 24,

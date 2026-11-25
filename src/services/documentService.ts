@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+import { File } from "expo-file-system";
 import { apiRequest } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import {
@@ -29,13 +31,20 @@ export const documentService = {
   async uploadDocument(params: UploadDocumentParams): Promise<DocumentItem> {
     const formData = new FormData();
 
-    const filePayload = {
-      uri: params.uri,
-      name: params.name || "document.pdf",
-      type: params.mimeType || "application/octet-stream",
-    } as any;
-
-    formData.append("file", filePayload);
+    if (Platform.OS === "web") {
+      const response = await fetch(params.uri);
+      const blob = await response.blob();
+      formData.append("file", blob, params.name || "document.pdf");
+    } else {
+      const file = new File(params.uri);
+      const filePart = {
+        name: params.name || file.name || "document.pdf",
+        type: params.mimeType || file.type || "application/octet-stream",
+        bytes: () => file.bytes(),
+        uri: params.uri,
+      };
+      formData.append("file", filePart as any);
+    }
 
     if (params.orderId) {
       formData.append("orderId", params.orderId);

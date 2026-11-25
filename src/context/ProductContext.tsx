@@ -32,13 +32,14 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [catalogOptions, setCatalogOptions] = useState<CatalogOptions | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshProducts = useCallback(
     async (params?: ProductQueryParams) => {
       if (!isAuthenticated) {
         setProducts([]);
+        setIsLoading(false);
         return;
       }
 
@@ -66,6 +67,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       refreshProducts();
     } else {
       setProducts([]);
+      setIsLoading(false);
     }
   }, [isAuthenticated, refreshProducts]);
 

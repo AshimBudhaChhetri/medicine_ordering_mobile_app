@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import { useStockists } from "../../context/StockistContext";
 
 import {
@@ -23,6 +24,7 @@ import { colors } from "../../theme/colors";
 
 export default function AddStockistScreen() {
   const { addStockist } = useStockists();
+  const { isSuperAdmin, isLoading: isAuthLoading } = useAuth();
   const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
   const [stockistName, setStockistName] = useState("");
@@ -30,6 +32,10 @@ export default function AddStockistScreen() {
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (!isAuthLoading && !isSuperAdmin) {
+    return <Redirect href="/(tabs)/stockists" />;
+  }
 
   const handleSubmit = async () => {
     const cleanName = stockistName.trim();

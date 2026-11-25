@@ -22,7 +22,7 @@ export default function Index() {
   }
 
   if (isAuthenticated) {
-    return <Redirect href="/(tabs)/home" />;
+    return <Redirect href={"/(tabs)/orders" as any} />;
   }
 
   return <Redirect href="/login" />;

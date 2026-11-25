@@ -64,6 +64,9 @@ export const API_ENDPOINTS = {
     details: (id: string) => `${API_BASE_URL}/orders/${id}`,
     approve: (id: string) => `${API_BASE_URL}/orders/${id}/approve`,
     reject: (id: string) => `${API_BASE_URL}/orders/${id}/reject`,
+    timeline: (id: string) => `${API_BASE_URL}/orders/${id}/timeline`,
+    remarks: (id: string) => `${API_BASE_URL}/orders/${id}/remarks`,
+    remark: (id: string) => `${API_BASE_URL}/orders/remarks/${id}`,
   },
 
   // Documents

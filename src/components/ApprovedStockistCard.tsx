@@ -48,13 +48,7 @@ export function ApprovedStockistCard({
             <Text style={styles.location}>{location}</Text>
           </View>
         </View>
-
-        <View style={styles.activeBadge}>
-          <Text style={styles.activeText}>Active</Text>
-        </View>
-      </View>
-
-      {/* Dynamic Orders & Registration Meta */}
+        {/* Dynamic Orders & Registration Meta */}
       {(totalOrders !== undefined || createdDate) && (
         <View style={styles.metaRow}>
           {totalOrders !== undefined && (
@@ -69,19 +63,9 @@ export function ApprovedStockistCard({
               </Text>
             </View>
           )}
-
-          {createdDate && (
-            <View style={styles.metaItem}>
-              <MaterialCommunityIcons
-                name="calendar-check-outline"
-                size={14}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.metaDateText}>Added {createdDate}</Text>
-            </View>
-          )}
         </View>
       )}
+      </View>
 
       {(contactPerson || phone) && (
         <>
@@ -119,7 +103,7 @@ export function ApprovedStockistCard({
         />
 
         <Text style={styles.requestButtonText}>
-          New Medicine Order
+          New Order
         </Text>
       </Pressable>
     </Pressable>
@@ -129,8 +113,6 @@ export function ApprovedStockistCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 18,
     padding: 16,
   },
@@ -184,8 +166,6 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 12,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   metaItem: {
     flexDirection: "row",

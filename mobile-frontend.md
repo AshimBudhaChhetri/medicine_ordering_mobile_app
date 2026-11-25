@@ -1,6 +1,6 @@
 # MedFlow Mobile Frontend Backend Integration Guide
 
-This guide is the complete backend and API integration reference for the **React Native / Expo** mobile application (`med-frontend-mobile`). It documents every HTTP and WebSocket endpoint, payload structure, data types, authentication mechanisms, and integration requirements.
+This document is the authoritative integration contract for the **React Native / Expo** mobile frontend (`med-frontend-mobile`). It documents every HTTP and WebSocket endpoint, payload structure, data types, authentication mechanisms, and integration requirements.
 
 ---
 
@@ -796,6 +796,7 @@ Retrieve single order details by UUID.
 #### `PATCH /orders/:id/approve`
 Approve an order (`pending` → `approved`).
 - **Auth:** `superadmin`
+- **Behavior:** Deducts ordered items (`quantity + bonus`) from the respective products' inventory stock (`amount`). If any product has insufficient stock, the transaction rolls back and returns **HTTP 400 Bad Request** (`"Insufficient stock for \"...\""`).
 - **Response (200 OK):** Updated `OrderView` with `approvedBy` and `approvedAt`.
 
 #### `PATCH /orders/:id/reject`
@@ -1018,8 +1019,6 @@ Delete an orphaned file from disk.
 ---
 
 ## 6. TypeScript Interfaces & Models
-
-Create or update these definitions inside `src/types/` in the mobile project:
 
 ```typescript
 // --- Authentication & User ---
