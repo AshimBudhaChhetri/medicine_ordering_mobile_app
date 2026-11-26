@@ -7,6 +7,7 @@ type Props = {
   value: number | string;
   icon: any;
   tone?: "blue" | "orange" | "green" | "purple";
+  cardStyle?: any;
 };
 
 const tones = {
@@ -44,7 +45,7 @@ export function StatCard({
       <View
         style={[
           styles.iconContainer,
-          { backgroundColor: selectedTone.background },
+          { backgroundColor: "#FFFFFF" },
         ]}
       >
         <MaterialCommunityIcons
@@ -75,7 +76,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 42,
     height: 42,
-    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,

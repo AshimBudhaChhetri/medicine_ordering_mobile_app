@@ -1,149 +1,149 @@
 import {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
+  useEffect,
   useState,
 } from "react";
 
-export type ApprovedStockist = {
-  id: string;
-  name: string;
-  location: string;
-  contactPerson: string;
-  phone: string;
-};
+import { stockistService } from "../services/stockistService";
+import { CreateStockistInput, Stockist } from "../types/stockist";
+import { useAuth } from "./AuthContext";
 
-export type StockistApprovalRequest = {
+export interface StockistApprovalRequest {
   id: string;
   name: string;
   location: string;
-  contactPerson: string;
-  phone: string;
+  contactPerson?: string;
+  phone?: string;
   email?: string;
-  address: string;
+  address?: string;
   notes?: string;
-
   submittedDate: string;
-
   status: "PENDING" | "REJECTED";
-
   rejectionReason?: string;
-};
+}
 
-type NewStockistRequest = {
-  name: string;
-  location: string;
-  contactPerson: string;
-  phone: string;
-  email?: string;
-  address: string;
-  notes?: string;
-};
-
-type StockistContextType = {
-  approvedStockists: ApprovedStockist[];
-
+export type StockistContextType = {
+  stockists: Stockist[];
+  /** Alias for stockists to support existing screens seamlessly */
+  approvedStockists: Stockist[];
   approvalRequests: StockistApprovalRequest[];
-
-  addStockistRequest: (
-    stockist: NewStockistRequest
-  ) => void;
+  isLoading: boolean;
+  error: string | null;
+  refreshStockists: () => Promise<void>;
+  getStockistById: (id: string) => Promise<Stockist | undefined>;
+  addStockist: (input: CreateStockistInput) => Promise<Stockist>;
+  /** Compatible signature with previous mock implementation */
+  addStockistRequest: (stockist: {
+    name: string;
+    location?: string;
+    address?: string;
+    contactPerson?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+  }) => Promise<Stockist>;
 };
 
-const StockistContext =
-  createContext<StockistContextType | undefined>(
-    undefined
-  );
+const StockistContext = createContext<StockistContextType | undefined>(
+  undefined
+);
 
-const initialApprovedStockists: ApprovedStockist[] = [
-  {
-    id: "stockist-1",
-    name: "Shree Pharmacy",
-    location: "Kathmandu",
-    contactPerson: "Ram Sharma",
-    phone: "9800000001",
-  },
+export function StockistProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
 
-  {
-    id: "stockist-2",
-    name: "City Medical",
-    location: "Lalitpur",
-    contactPerson: "Suman Maharjan",
-    phone: "9800000002",
-  },
+  const [stockists, setStockists] = useState<Stockist[]>([]);
+  const [approvalRequests] = useState<StockistApprovalRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  {
-    id: "stockist-3",
-    name: "ABC Pharmacy",
-    location: "Bhaktapur",
-    contactPerson: "Bikash Thapa",
-    phone: "9800000003",
-  },
-];
+  const fetchStockists = useCallback(async () => {
+    if (!isAuthenticated) {
+      setStockists([]);
+      setIsLoading(false);
+      return;
+    }
 
-const initialApprovalRequests: StockistApprovalRequest[] = [
-  {
-    id: "request-1",
-    name: "Everest Pharmacy",
-    location: "Lalitpur",
-    contactPerson: "Hari KC",
-    phone: "9800000010",
-    address: "Jawalakhel, Lalitpur",
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await stockistService.getStockists();
+      setStockists(data);
+    } catch (err: any) {
+      console.warn("Failed to load stockists:", err);
+      setError(err?.message || "Failed to load stockists");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
 
-    submittedDate: "30 Sep 2026",
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchStockists();
+    } else {
+      setStockists([]);
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, fetchStockists]);
 
-    status: "REJECTED",
+  const getStockistById = async (id: string): Promise<Stockist | undefined> => {
+    const existing = stockists.find((s) => s.id === id);
+    if (existing) {
+      return existing;
+    }
+    try {
+      const fetched = await stockistService.getStockist(id);
+      if (fetched) {
+        setStockists((prev) => {
+          if (prev.some((s) => s.id === fetched.id)) return prev;
+          return [fetched, ...prev];
+        });
+        return fetched;
+      }
+    } catch {
+      // Fallback
+    }
+    return undefined;
+  };
 
-    rejectionReason:
-      "This stockist is already registered in the system.",
-  },
-];
+  const addStockist = async (input: CreateStockistInput): Promise<Stockist> => {
+    const newStockist = await stockistService.createStockist(input);
+    setStockists((prev) => {
+      const filtered = prev.filter((s) => s.id !== newStockist.id);
+      return [newStockist, ...filtered];
+    });
+    return newStockist;
+  };
 
-export function StockistProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [
-    approvalRequests,
-    setApprovalRequests,
-  ] = useState(initialApprovalRequests);
-
-  const [
-    approvedStockists,
-  ] = useState(initialApprovedStockists);
-
-  const addStockistRequest = (
-    stockist: NewStockistRequest
-  ) => {
-    const newRequest: StockistApprovalRequest = {
-      id: `request-${Date.now()}`,
-
-      ...stockist,
-
-      submittedDate: new Date().toLocaleDateString(
-        "en-GB",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
-      ),
-
-      status: "PENDING",
-    };
-
-    setApprovalRequests((current) => [
-      newRequest,
-      ...current,
-    ]);
+  const addStockistRequest = async (form: {
+    name: string;
+    location?: string;
+    address?: string;
+    contactPerson?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+  }): Promise<Stockist> => {
+    const loc = form.location?.trim() || form.address?.trim() || "Location not specified";
+    return addStockist({
+      name: form.name.trim(),
+      location: loc,
+    });
   };
 
   return (
     <StockistContext.Provider
       value={{
-        approvedStockists,
+        stockists,
+        approvedStockists: stockists,
         approvalRequests,
+        isLoading,
+        error,
+        refreshStockists: fetchStockists,
+        getStockistById,
+        addStockist,
         addStockistRequest,
       }}
     >
@@ -154,12 +154,8 @@ export function StockistProvider({
 
 export function useStockists() {
   const context = useContext(StockistContext);
-
   if (!context) {
-    throw new Error(
-      "useStockists must be used inside StockistProvider"
-    );
+    throw new Error("useStockists must be used inside StockistProvider");
   }
-
   return context;
 }

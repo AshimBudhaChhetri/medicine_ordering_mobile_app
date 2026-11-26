@@ -1,10 +1,12 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 
 import {
+  FlatList,
+  Platform,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -13,506 +15,311 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ApprovedStockistCard } from "../../components/ApprovedStockistCard";
-import { StockistApprovalCard } from "../../components/StockistApprovalCard";
+import { StockistCardSkeleton } from "../../components/Skeleton";
+import { useAuth } from "../../context/AuthContext";
+import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 
-type Tab = "APPROVED" | "REQUESTS";
-
 export default function StockistsScreen() {
-  const { approvedStockists, approvalRequests } = useStockists();
-
-  const [activeTab, setActiveTab] =
-    useState<Tab>("APPROVED");
+  const { isSuperAdmin } = useAuth();
+  const { stockists, isLoading, refreshStockists } = useStockists();
+  const { requests, refreshOrders } = useRequests();
 
   const [search, setSearch] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const {
-    isTablet,
-    gutter,
-    contentMaxWidth,
-  } = useResponsive();
+  const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
-  // Filter approved stockists
+  // Re-fetch stockists and orders whenever the tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshStockists().catch(() => { });
+      refreshOrders().catch(() => { });
+    }, [refreshStockists, refreshOrders])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      refreshStockists().catch(() => { }),
+      refreshOrders().catch(() => { }),
+    ]);
+    setIsRefreshing(false);
+  }, [refreshStockists, refreshOrders]);
+
+  // Map orders count by stockist ID
+  const ordersCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const req of requests) {
+      if (req.stockistId) {
+        map[req.stockistId] = (map[req.stockistId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [requests]);
+
+  // Filter stockists
   const filteredStockists = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     if (!query) {
-      return approvedStockists;
+      return stockists;
     }
 
-    return approvedStockists.filter((stockist) => {
+    return stockists.filter((stockist) => {
       return (
         stockist.name.toLowerCase().includes(query) ||
-        stockist.location.toLowerCase().includes(query) ||
-        stockist.contactPerson
-          .toLowerCase()
-          .includes(query) ||
-        stockist.phone.toLowerCase().includes(query)
+        stockist.location.toLowerCase().includes(query)
       );
     });
-  }, [search, approvedStockists]);
-
-  // Filter stockist approval requests
-  const filteredApprovalRequests = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) {
-      return approvalRequests;
-    }
-
-    return approvalRequests.filter((request) => {
-      return (
-        request.name.toLowerCase().includes(query) ||
-        request.location.toLowerCase().includes(query) ||
-        request.contactPerson
-          .toLowerCase()
-          .includes(query) ||
-        request.phone.toLowerCase().includes(query)
-      );
-    });
-  }, [search, approvalRequests]);
-
-  const pendingCount = approvalRequests.filter(
-    (request) => request.status === "PENDING"
-  ).length;
+  }, [search, stockists]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
+      <FlatList
+        key={isTablet ? "stockists-tablet" : "stockists-phone"}
+        data={filteredStockists}
+        keyExtractor={(item) => item.id}
+        numColumns={isTablet ? 2 : 1}
+        columnWrapperStyle={isTablet ? styles.stockistRow : undefined}
+        renderItem={({ item: stockist }) => {
+          const totalOrders = ordersCountMap[stockist.id] || 0;
+          const createdDate = stockist.createdAt
+            ? new Date(stockist.createdAt).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+            : undefined;
+
+          return (
+            <View
+              style={[
+                styles.stockistItem,
+                isTablet && styles.stockistItemTablet,
+              ]}
+            >
+              <Pressable
+                style={({ pressed }) => [
+                  styles.itemCard,
+                  pressed && { opacity: 0.88 },
+                ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/stockist/[id]",
+                    params: { id: stockist.id },
+                  })
+                }
+              >
+                {/* Icon */}
+                <View style={styles.itemImageBox}>
+                  <MaterialCommunityIcons
+                    name="storefront-outline"
+                    size={26}
+                    color="#9CA3AF"
+                  />
+                </View>
+
+                {/* Info */}
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemTitle} numberOfLines={1}>
+                    {stockist.name}
+                  </Text>
+                  <Text style={styles.itemSubtitle} numberOfLines={1}>
+                    {stockist.location}
+                  </Text>
+                  {totalOrders > 0 && (
+                    <Text style={styles.itemMeta}>
+                      {totalOrders} {totalOrders === 1 ? "order" : "orders"} placed
+                    </Text>
+                  )}
+                </View>
+
+                {/* New Order shortcut */}
+                <Pressable
+                  style={styles.newOrderBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    router.push({
+                      pathname: "/(tabs)/new-request",
+                      params: { stockistId: stockist.id },
+                    });
+                  }}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons name="plus" size={18} color="#7a7a7aff" />
+                </Pressable>
+              </Pressable>
+            </View>
+          );
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingHorizontal: gutter,
-          },
+          { paddingHorizontal: gutter },
+          contentMaxWidth
+            ? {
+              width: "100%",
+              maxWidth: contentMaxWidth,
+              alignSelf: "center",
+            }
+            : undefined,
         ]}
-      >
-        <View
-          style={[
-            styles.container,
-            contentMaxWidth
-              ? {
-                  width: "100%",
-                  maxWidth: contentMaxWidth,
-                  alignSelf: "center",
-                }
-              : undefined,
-          ]}
-        >
-          {/* HEADER */}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === "android"}
+        ListHeaderComponent={
+          <View>
+            {/* HEADER */}
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>Stockists</Text>
+              </View>
 
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>
-                My Stockists
-              </Text>
-
-              <Text style={styles.subtitle}>
-                View your approved stockists and manage new
-                stockist approval requests.
-              </Text>
+              {/* Tablet Add Button */}
+              {isTablet && isSuperAdmin && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.addButtonTablet,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => router.push("/stockist/add")}
+                >
+                  <MaterialCommunityIcons
+                    name="store-plus-outline"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.addButtonText}>Add Stockist</Text>
+                </Pressable>
+              )}
             </View>
 
-            {/* Tablet Add Button */}
-
-            {isTablet && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.addButtonTablet,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() =>
-                  router.push("/stockist/add")
-                }
-              >
-                <MaterialCommunityIcons
-                  name="store-plus-outline"
-                  size={20}
-                  color="#FFFFFF"
-                />
-
-                <Text style={styles.addButtonText}>
-                  Add Stockist
-                </Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* SEARCH */}
-
-          <View style={styles.searchContainer}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={21}
-              color={colors.textMuted}
-            />
-
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder={
-                activeTab === "APPROVED"
-                  ? "Search approved stockists..."
-                  : "Search approval requests..."
-              }
-              placeholderTextColor={colors.textMuted}
-              style={styles.searchInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            {search.length > 0 && (
-              <Pressable
-                onPress={() => setSearch("")}
-                hitSlop={10}
-              >
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={19}
-                  color={colors.textMuted}
-                />
-              </Pressable>
-            )}
-          </View>
-
-          {/* TABS */}
-
-          <View style={styles.tabs}>
-            {/* APPROVED TAB */}
-
-            <Pressable
-              style={[
-                styles.tab,
-                activeTab === "APPROVED"
-                  ? styles.activeTab
-                  : undefined,
-              ]}
-              onPress={() =>
-                setActiveTab("APPROVED")
-              }
-            >
+            {/* SEARCH */}
+            <View style={styles.searchBar}>
               <MaterialCommunityIcons
-                name="store-check-outline"
-                size={18}
-                color={
-                  activeTab === "APPROVED"
-                    ? colors.primary
-                    : colors.textSecondary
-                }
+                name="magnify"
+                size={20}
+                color="#9CA3AF"
               />
 
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "APPROVED"
-                    ? styles.activeTabText
-                    : undefined,
-                ]}
-              >
-                Approved
-              </Text>
-
-              <View
-                style={[
-                  styles.countBadge,
-                  activeTab === "APPROVED"
-                    ? styles.activeCountBadge
-                    : undefined,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.countText,
-                    activeTab === "APPROVED"
-                      ? styles.activeCountText
-                      : undefined,
-                  ]}
-                >
-                  {approvedStockists.length}
-                </Text>
-              </View>
-            </Pressable>
-
-            {/* APPROVAL REQUESTS TAB */}
-
-            <Pressable
-              style={[
-                styles.tab,
-                activeTab === "REQUESTS"
-                  ? styles.activeTab
-                  : undefined,
-              ]}
-              onPress={() =>
-                setActiveTab("REQUESTS")
-              }
-            >
-              <MaterialCommunityIcons
-                name="clock-outline"
-                size={18}
-                color={
-                  activeTab === "REQUESTS"
-                    ? colors.primary
-                    : colors.textSecondary
-                }
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search"
+                placeholderTextColor="#9CA3AF"
+                style={styles.searchInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
               />
 
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "REQUESTS"
-                    ? styles.activeTabText
-                    : undefined,
-                ]}
-              >
-                Approval Requests
-              </Text>
-
-              <View
-                style={[
-                  styles.countBadge,
-                  activeTab === "REQUESTS"
-                    ? styles.activeCountBadge
-                    : undefined,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.countText,
-                    activeTab === "REQUESTS"
-                      ? styles.activeCountText
-                      : undefined,
-                  ]}
-                >
-                  {approvalRequests.length}
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-
-          {/* PENDING APPROVAL MESSAGE */}
-
-          {pendingCount > 0 && (
-            <View style={styles.pendingBanner}>
-              <View style={styles.pendingBannerIcon}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={21}
-                  color={colors.warning}
-                />
-              </View>
-
-              <View style={styles.pendingBannerContent}>
-                <Text style={styles.pendingBannerTitle}>
-                  {pendingCount}{" "}
-                  {pendingCount === 1
-                    ? "stockist request"
-                    : "stockist requests"}{" "}
-                  waiting for approval
-                </Text>
-
-                <Text style={styles.pendingBannerText}>
-                  You can create medicine requests only after
-                  Admin approves the stockist.
-                </Text>
-              </View>
+              {search.length > 0 && (
+                <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                </Pressable>
+              )}
             </View>
-          )}
 
-          {/* APPROVED STOCKISTS */}
-
-          {activeTab === "APPROVED" && (
-            <>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>
-                  APPROVED STOCKISTS
-                </Text>
-
-                <Text style={styles.sectionCount}>
-                  {filteredStockists.length}
-                </Text>
-              </View>
-
-              {filteredStockists.length > 0 ? (
+            {/* LIST HEADER */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Registered Stockists</Text>
+              <Text style={styles.sectionCount}>
+                {filteredStockists.length}
+              </Text>
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          isLoading && !isRefreshing && stockists.length === 0 ? (
+            <View
+              style={[
+                styles.cardGrid,
+                isTablet ? styles.cardGridTablet : undefined,
+              ]}
+            >
+              {Array.from({ length: 4 }).map((_, index) => (
                 <View
+                  key={index}
                   style={[
-                    styles.cardGrid,
-                    isTablet
-                      ? styles.cardGridTablet
-                      : undefined,
+                    styles.cardWrapper,
+                    isTablet ? styles.cardWrapperTablet : undefined,
                   ]}
                 >
-                  {filteredStockists.map(
-                    (stockist) => (
-                      <View
-                        key={stockist.id}
-                        style={[
-                          styles.cardWrapper,
-                          isTablet
-                            ? styles.cardWrapperTablet
-                            : undefined,
-                        ]}
-                      >
-                        <ApprovedStockistCard
-                          name={stockist.name}
-                          location={
-                            stockist.location
-                          }
-                          contactPerson={
-                            stockist.contactPerson
-                          }
-                          phone={stockist.phone}
-                          // Open Stockist Details
-                          onPress={() =>
-                            router.push({
-                              pathname:
-                                "/stockist/[id]",
-                              params: {
-                                id: stockist.id,
-                              },
-                            })
-                          }
-                          // Directly create a medicine request
-                          onNewRequest={() =>
-                            router.push({
-                              pathname:
-                                "/(tabs)/new-request",
-                              params: {
-                                stockistId:
-                                  stockist.id,
-                              },
-                            })
-                          }
-                        />
-                      </View>
-                    )
-                  )}
+                  <StockistCardSkeleton />
                 </View>
-              ) : (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIcon}>
-                    <MaterialCommunityIcons
-                      name="store-search-outline"
-                      size={38}
-                      color={colors.primary}
-                    />
-                  </View>
-
-                  <Text style={styles.emptyTitle}>
-                    No stockists found
-                  </Text>
-
-                  <Text style={styles.emptyText}>
-                    Try using a different search term.
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
-
-          {/* APPROVAL REQUESTS */}
-
-          {activeTab === "REQUESTS" && (
-            <>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>
-                  STOCKIST APPROVAL REQUESTS
-                </Text>
-
-                <Text style={styles.sectionCount}>
-                  {filteredApprovalRequests.length}
-                </Text>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <MaterialCommunityIcons
+                  name="store-search-outline"
+                  size={38}
+                  color={colors.primary}
+                />
               </View>
 
-              {filteredApprovalRequests.length >
-              0 ? (
-                <View
-                  style={[
-                    styles.cardGrid,
-                    isTablet
-                      ? styles.cardGridTablet
-                      : undefined,
-                  ]}
+              <Text style={styles.emptyTitle}>No stockists found</Text>
+              <Text style={styles.emptyText}>
+                {search.trim().length > 0
+                  ? "Try using a different search term."
+                  : isSuperAdmin
+                    ? "Add your first stockist to start placing orders."
+                    : "No stockists have been assigned to your areas yet."}
+              </Text>
+
+              {isSuperAdmin && (
+                <Pressable
+                  style={styles.emptyAddButton}
+                  onPress={() => router.push("/stockist/add")}
                 >
-                  {filteredApprovalRequests.map(
-                    (request) => (
-                      <View
-                        key={request.id}
-                        style={[
-                          styles.cardWrapper,
-                          isTablet
-                            ? styles.cardWrapperTablet
-                            : undefined,
-                        ]}
-                      >
-                        <StockistApprovalCard
-                          name={request.name}
-                          location={
-                            request.location
-                          }
-                          submittedDate={
-                            request.submittedDate
-                          }
-                          status={request.status}
-                          rejectionReason={
-                            request.rejectionReason
-                          }
-                        />
-                      </View>
-                    )
-                  )}
-                </View>
-              ) : (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIcon}>
-                    <MaterialCommunityIcons
-                      name="clipboard-check-outline"
-                      size={38}
-                      color={colors.primary}
-                    />
-                  </View>
-
-                  <Text style={styles.emptyTitle}>
-                    No approval requests
-                  </Text>
-
-                  <Text style={styles.emptyText}>
-                    Stockist requests submitted to Admin will
-                    appear here.
-                  </Text>
-                </View>
+                  <MaterialCommunityIcons
+                    name="plus"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.emptyAddText}>Add Stockist</Text>
+                </Pressable>
               )}
-            </>
-          )}
-
-          {/* MOBILE ADD STOCKIST BUTTON */}
-
-          {!isTablet && (
+            </View>
+          )
+        }
+        ListFooterComponent={
+          !isTablet && isSuperAdmin ? (
             <Pressable
               style={({ pressed }) => [
                 styles.addButton,
                 pressed && styles.buttonPressed,
               ]}
-              onPress={() =>
-                router.push("/stockist/add")
-              }
+              onPress={() => router.push("/stockist/add")}
             >
               <MaterialCommunityIcons
                 name="store-plus-outline"
-                size={21}
+                size={20}
                 color="#FFFFFF"
               />
-
-              <Text style={styles.addButtonText}>
-                Add New Stockist
-              </Text>
+              <Text style={styles.addButtonText}>Add New Stockist</Text>
             </Pressable>
-          )}
-        </View>
-      </ScrollView>
+          ) : null
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -520,359 +327,219 @@ export default function StockistsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#FFFFFF",
   },
-
   scrollContent: {
-    paddingTop: 12,
-    paddingBottom: 120,
+    flexGrow: 1,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
-
   container: {
-    flex: 1,
+    width: "100%",
   },
-
-  // Header
-
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-
-    marginBottom: 22,
-
-    gap: 20,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-
   headerText: {
     flex: 1,
   },
-
   title: {
-    fontSize: 27,
-    fontWeight: "700",
-
-    color: colors.text,
+    fontSize: 22,
+    fontWeight: "500",
+    color: "#000000",
   },
-
   subtitle: {
-    marginTop: 6,
-
-    maxWidth: 560,
-
+    marginTop: 4,
     fontSize: 13,
-    lineHeight: 19,
-
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
-  // Search
-
-  searchContainer: {
-    minHeight: 50,
-
-    paddingHorizontal: 14,
-
+  addButtonTablet: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
-
-    backgroundColor: colors.card,
-
-    borderWidth: 1,
-    borderColor: colors.border,
-
-    borderRadius: 14,
+    gap: 8,
   },
-
+  addButton: {
+    marginTop: 20,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 24,
+    height: 44,
+    paddingHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 16,
+  },
   searchInput: {
     flex: 1,
-
     marginLeft: 8,
-    marginRight: 8,
-
-    paddingVertical: 0,
-
-    fontSize: 14,
-
-    color: colors.text,
+    fontSize: 15,
+    color: "#000000",
+    fontWeight: "400",
   },
-
-  // Tabs
-
-  tabs: {
-    marginTop: 18,
-
-    padding: 4,
-
-    flexDirection: "row",
-
-    backgroundColor: "#EDF1F7",
-
-    borderRadius: 14,
-  },
-
-  tab: {
-    flex: 1,
-
-    minHeight: 44,
-
-    paddingHorizontal: 5,
-
-    borderRadius: 11,
-
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-
-    gap: 5,
-  },
-
-  activeTab: {
-    backgroundColor: colors.card,
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-
-    elevation: 1,
-  },
-
-  tabText: {
-    fontSize: 11,
-    fontWeight: "600",
-
-    color: colors.textSecondary,
-  },
-
-  activeTabText: {
-    color: colors.primary,
-  },
-
-  countBadge: {
-    minWidth: 22,
-    height: 22,
-
-    paddingHorizontal: 5,
-
-    borderRadius: 11,
-
-    backgroundColor: "#DDE3ED",
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  activeCountBadge: {
-    backgroundColor: colors.primarySoft,
-  },
-
-  countText: {
-    fontSize: 10,
-    fontWeight: "700",
-
-    color: colors.textSecondary,
-  },
-
-  activeCountText: {
-    color: colors.primary,
-  },
-
-  // Pending banner
-
-  pendingBanner: {
-    marginTop: 16,
-
-    padding: 13,
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    backgroundColor: colors.warningSoft,
-
-    borderRadius: 15,
-
-    borderWidth: 1,
-    borderColor: "#F8DFAC",
-  },
-
-  pendingBannerIcon: {
-    width: 40,
-    height: 40,
-
-    borderRadius: 12,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "#FFFFFF",
-  },
-
-  pendingBannerContent: {
-    flex: 1,
-
-    marginLeft: 11,
-  },
-
-  pendingBannerTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  pendingBannerText: {
-    marginTop: 3,
-
-    fontSize: 11,
-    lineHeight: 16,
-
-    color: colors.textSecondary,
-  },
-
-  // Sections
-
   sectionHeader: {
-    marginTop: 26,
-    marginBottom: 12,
-
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-
-    letterSpacing: 0.7,
-
-    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
   },
-
   sectionCount: {
-    fontSize: 11,
-    fontWeight: "700",
-
-    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-
-  // Grid
-
   cardGrid: {
     gap: 12,
   },
-
   cardGridTablet: {
     flexDirection: "row",
     flexWrap: "wrap",
-
-    alignItems: "flex-start",
+    gap: 16,
   },
-
   cardWrapper: {
     width: "100%",
   },
-
   cardWrapperTablet: {
-    width: "48.8%",
+    width: "48%",
   },
-
-  // Buttons
-
-  addButtonTablet: {
-    minHeight: 46,
-
-    paddingVertical: 11,
-    paddingHorizontal: 17,
-
-    borderRadius: 13,
-
-    backgroundColor: colors.primary,
-
+  stockistRow: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  stockistItem: {
+    width: "100%",
+    marginBottom: 10,
+  },
+  stockistItemTablet: {
+    flex: 1,
+    width: undefined,
+    marginBottom: 0,
+  },
+  itemCard: {
     flexDirection: "row",
     alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    overflow: "hidden",
+    minHeight: 68,
+  },
+  itemImageBox: {
+    width: 68,
+    alignSelf: "stretch",
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
-
+    alignItems: "center",
+  },
+  itemInfo: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "center",
+  },
+  itemTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#000000",
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    fontWeight: "300",
+    color: "#000000",
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  itemMeta: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: "#2563EB",
+    marginTop: 3,
+  },
+  newOrderBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 6,
+    backgroundColor: "#e4e4e4ff",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  emptyState: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    padding: 30,
+    alignItems: "center",
+    marginVertical: 12,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000000",
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
+    lineHeight: 18,
+    fontWeight: "400",
+  },
+  emptyAddButton: {
+    marginTop: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
-
-  addButton: {
-    marginTop: 26,
-
-    minHeight: 54,
-
-    borderRadius: 15,
-
-    backgroundColor: colors.primary,
-
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-
-    gap: 7,
-  },
-
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-
+  emptyAddText: {
     color: "#FFFFFF",
-  },
-
-  buttonPressed: {
-    opacity: 0.85,
-
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-
-  // Empty states
-
-  emptyState: {
-    paddingVertical: 60,
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  emptyIcon: {
-    width: 68,
-    height: 68,
-
-    borderRadius: 22,
-
-    backgroundColor: colors.primarySoft,
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  emptyTitle: {
-    marginTop: 14,
-
-    fontSize: 16,
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  emptyText: {
-    marginTop: 5,
-
-    maxWidth: 300,
-
-    textAlign: "center",
-
-    fontSize: 12,
-    lineHeight: 18,
-
-    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

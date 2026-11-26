@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "21381597502",
+    "project_id": "med-app-596f6",
+    "storage_bucket": "med-app-596f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:21381597502:android:0bb0ad19dc586e95a5846f",
+        "android_client_info": {
+          "package_name": "com.apoog.mediflowmr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkVSqjHZmCl6Eg1azEfzVX9EmkWr74T08"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

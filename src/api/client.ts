@@ -92,6 +92,23 @@ export async function apiRequest<T>(
     new Headers(headers);
 
   /**
+   * Better Auth and modern CSRF protections check the Origin/Referer header
+   * on state-changing requests when cookies are present. React Native's fetch
+   * does not supply an Origin header by default, so we attach the target origin.
+   */
+  try {
+    const origin = url.startsWith("http") ? new URL(url).origin : API_BASE_URL;
+    if (!requestHeaders.has("Origin")) {
+      requestHeaders.set("Origin", origin);
+    }
+    if (!requestHeaders.has("Referer")) {
+      requestHeaders.set("Referer", `${origin}/`);
+    }
+  } catch {
+    // Ignore URL parse errors
+  }
+
+  /**
    * JSON is our default request format.
    *
    * Do NOT set this header manually for
@@ -108,7 +125,7 @@ export async function apiRequest<T>(
   }
 
   /**
-   * Attach Better Auth session cookie
+   * Attach Better Auth session cookie and Bearer authorization
    * to protected API calls.
    */
   if (authenticated) {
@@ -120,6 +137,9 @@ export async function apiRequest<T>(
         "Cookie",
         `better-auth.session_token=${sessionToken}`
       );
+      if (!requestHeaders.has("Authorization")) {
+        requestHeaders.set("Authorization", `Bearer ${sessionToken}`);
+      }
     }
   }
 

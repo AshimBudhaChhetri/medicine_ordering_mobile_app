@@ -1,61 +1,42 @@
 import { apiRequest } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-
 import {
   LoginRequest,
   LoginResponse,
   SessionResponse,
 } from "../types/auth";
-
 import {
   clearSessionToken,
   saveSessionToken,
 } from "../storage/session";
 
 /**
- * Authentication-specific API logic.
- *
- * Screens should call these methods
- * instead of knowing backend routes.
+ * Authentication and profile API methods.
  */
 export const authService = {
   /**
    * Email/password login.
    */
-  async login(
-    credentials: LoginRequest
-  ) {
-    const response =
-      await apiRequest<LoginResponse>(
-        API_ENDPOINTS.auth.login,
-        {
-          method: "POST",
-
-          authenticated: false,
-
-          body: credentials,
-        }
-      );
-
-    /**
-     * Backend returns the Better Auth
-     * session token in the login body.
-     *
-     * Save it securely so every future
-     * authenticated request can use it.
-     */
-    await saveSessionToken(
-      response.token
+  async login(credentials: LoginRequest): Promise<LoginResponse> {
+    const response = await apiRequest<LoginResponse>(
+      API_ENDPOINTS.auth.login,
+      {
+        method: "POST",
+        authenticated: false,
+        body: credentials,
+      }
     );
+
+    // Save session token returned by better-auth
+    await saveSessionToken(response.token);
 
     return response;
   },
 
   /**
-   * Verify stored session and load
-   * the currently authenticated user.
+   * Verify stored session and load currently authenticated user.
    */
-  async getSession() {
+  async getSession(): Promise<SessionResponse> {
     return apiRequest<SessionResponse>(
       API_ENDPOINTS.auth.session,
       {
@@ -65,23 +46,62 @@ export const authService = {
   },
 
   /**
-   * Tell backend to invalidate the
-   * current session and clear local token.
+   * Invalidate current session and clear local token.
    */
-  async logout() {
+  async logout(): Promise<void> {
     try {
-      await apiRequest(
-        API_ENDPOINTS.auth.logout,
-        {
-          method: "POST",
-        }
-      );
+      await apiRequest(API_ENDPOINTS.auth.logout, {
+        method: "POST",
+      });
+    } catch (error) {
+      console.warn("Backend logout request notification:", error);
     } finally {
-      /**
-       * Always remove local session,
-       * even if backend logout fails.
-       */
       await clearSessionToken();
     }
+  },
+
+  /**
+   * Request password reset OTP code.
+   */
+  async requestPasswordReset(email: string): Promise<{ status: string }> {
+    return apiRequest<{ status: string }>(
+      API_ENDPOINTS.passwordReset.request,
+      {
+        method: "POST",
+        authenticated: false,
+        body: { email },
+      }
+    );
+  },
+
+  /**
+   * Confirm password reset with OTP code and set new password.
+   */
+  async confirmPasswordReset(
+    email: string,
+    otp: string,
+    newPassword: string
+  ): Promise<{ status: string }> {
+    return apiRequest<{ status: string }>(
+      API_ENDPOINTS.passwordReset.confirm,
+      {
+        method: "POST",
+        authenticated: false,
+        body: { email, otp, newPassword },
+      }
+    );
+  },
+
+  /**
+   * Upload user profile avatar.
+   */
+  async updateAvatar(formData: FormData): Promise<{ image: string }> {
+    return apiRequest<{ image: string }>(
+      API_ENDPOINTS.users.meImage,
+      {
+        method: "PATCH",
+        body: formData,
+      }
+    );
   },
 };

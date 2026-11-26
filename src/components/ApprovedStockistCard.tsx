@@ -6,8 +6,10 @@ import { colors } from "../theme/colors";
 type Props = {
   name: string;
   location: string;
-  contactPerson: string;
-  phone: string;
+  contactPerson?: string;
+  phone?: string;
+  totalOrders?: number;
+  createdDate?: string;
   onPress?: () => void;
   onNewRequest?: () => void;
 };
@@ -17,6 +19,8 @@ export function ApprovedStockistCard({
   location,
   contactPerson,
   phone,
+  totalOrders,
+  createdDate,
   onPress,
   onNewRequest,
 }: Props) {
@@ -44,19 +48,46 @@ export function ApprovedStockistCard({
             <Text style={styles.location}>{location}</Text>
           </View>
         </View>
-
-        <View style={styles.activeBadge}>
-          <Text style={styles.activeText}>Active</Text>
+        {/* Dynamic Orders & Registration Meta */}
+      {(totalOrders !== undefined || createdDate) && (
+        <View style={styles.metaRow}>
+          {totalOrders !== undefined && (
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons
+                name="clipboard-list-outline"
+                size={14}
+                color={colors.primary}
+              />
+              <Text style={styles.metaText}>
+                {totalOrders} {totalOrders === 1 ? "order" : "orders"} placed
+              </Text>
+            </View>
+          )}
         </View>
+      )}
       </View>
 
-      <View style={styles.divider} />
+      {(contactPerson || phone) && (
+        <>
+          <View style={styles.divider} />
 
-      <Text style={styles.detailLabel}>Contact Person</Text>
-      <Text style={styles.detailValue}>{contactPerson}</Text>
+          {contactPerson && (
+            <>
+              <Text style={styles.detailLabel}>Contact Person</Text>
+              <Text style={styles.detailValue}>{contactPerson}</Text>
+            </>
+          )}
 
-      <Text style={[styles.detailLabel, { marginTop: 8 }]}>Phone</Text>
-      <Text style={styles.detailValue}>{phone}</Text>
+          {phone && (
+            <>
+              <Text style={[styles.detailLabel, contactPerson ? { marginTop: 8 } : undefined]}>
+                Phone
+              </Text>
+              <Text style={styles.detailValue}>{phone}</Text>
+            </>
+          )}
+        </>
+      )}
 
       <Pressable
         style={styles.requestButton}
@@ -72,7 +103,7 @@ export function ApprovedStockistCard({
         />
 
         <Text style={styles.requestButtonText}>
-          New Medicine Request
+          New Order
         </Text>
       </Pressable>
     </Pressable>
@@ -82,110 +113,104 @@ export function ApprovedStockistCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-
-    borderWidth: 1,
-    borderColor: colors.border,
-
     borderRadius: 18,
-
     padding: 16,
   },
-
   topRow: {
     flexDirection: "row",
     alignItems: "center",
   },
-
   iconContainer: {
     width: 48,
     height: 48,
-
     borderRadius: 15,
-
     backgroundColor: colors.primarySoft,
-
     alignItems: "center",
     justifyContent: "center",
   },
-
   info: {
     flex: 1,
     marginLeft: 12,
   },
-
   name: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
   },
-
   locationRow: {
     flexDirection: "row",
     alignItems: "center",
-
     marginTop: 4,
     gap: 3,
   },
-
   location: {
     fontSize: 12,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   activeBadge: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-
+    paddingVertical: 4,
+    paddingHorizontal: 9,
     borderRadius: 20,
-
     backgroundColor: colors.successSoft,
   },
-
   activeText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "500",
     color: colors.success,
   },
-
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 10,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
+  },
+  metaDateText: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: colors.textSecondary,
+  },
   divider: {
     height: 1,
     backgroundColor: colors.border,
-
     marginVertical: 14,
   },
-
   detailLabel: {
     fontSize: 11,
     color: colors.textSecondary,
+    fontWeight: "400",
   },
-
   detailValue: {
     marginTop: 2,
-
     fontSize: 13,
     fontWeight: "500",
     color: colors.text,
   },
-
   requestButton: {
-    marginTop: 16,
-
+    marginTop: 14,
     borderRadius: 12,
-
     paddingVertical: 11,
-
     backgroundColor: colors.primarySoft,
-
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-
     gap: 5,
   },
-
   requestButtonText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
     color: colors.primary,
   },
 });

@@ -1,207 +1,224 @@
 import {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
+  useEffect,
+  useMemo,
   useState,
 } from "react";
 
-export type RequestStatus =
-  | "PENDING"
-  | "PROCESSING"
-  | "COMPLETED"
-  | "CANCELLED";
+import { orderService } from "../services/orderService";
+import {
+  CreateOrderInput,
+  Order,
+  OrderQueryParams,
+  OrderStatus,
+  OrderType,
+} from "../types/order";
+import { useAuth } from "./AuthContext";
+
+export type RequestStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "CANCELLED" | OrderStatus;
 
 export type MedicineRequestItem = {
   medicineId: string;
   medicineName: string;
   quantity: number;
+  bonus?: number;
   unitPrice: number;
   subtotal: number;
 };
 
-export type MedicineRequest = {
+export interface MedicineRequestCompatibility {
   id: string;
   requestNumber: string;
-
+  orderType: OrderType;
   stockistId: string;
   stockistName: string;
-
+  toStockistName?: string;
   items: MedicineRequestItem[];
-
   totalItems: number;
   totalAmount: number;
-
   note?: string;
-
   status: RequestStatus;
-
   createdAt: string;
+  rawOrder: Order;
+}
+
+export type RequestContextType = {
+  orders: Order[];
+  /** Alias mapped to UI-friendly format for backwards compatibility */
+  requests: MedicineRequestCompatibility[];
+  total: number;
+  isLoading: boolean;
+  error: string | null;
+  refreshOrders: (params?: OrderQueryParams) => Promise<void>;
+  createOrder: (input: CreateOrderInput) => Promise<Order>;
+  getOrderById: (id: string) => Promise<Order | undefined>;
+  approveOrder: (id: string) => Promise<Order>;
+  rejectOrder: (id: string, reason?: string) => Promise<Order>;
+  createRequest: (input: {
+    stockistId: string;
+    stockistName?: string;
+    items: {
+      medicineId?: string;
+      medicineName: string;
+      quantity: number;
+      bonus?: number;
+      unitPrice: number;
+      subtotal?: number;
+    }[];
+    note?: string;
+  }) => Promise<Order>;
 };
 
-type CreateMedicineRequestInput = {
-  stockistId: string;
-  stockistName: string;
+const RequestContext = createContext<RequestContextType | undefined>(undefined);
 
-  items: MedicineRequestItem[];
-
-  totalItems: number;
-  totalAmount: number;
-
-  note?: string;
-};
-
-type RequestContextType = {
-  requests: MedicineRequest[];
-
-  createRequest: (
-    input: CreateMedicineRequestInput
-  ) => MedicineRequest;
-};
-
-const RequestContext =
-  createContext<RequestContextType | undefined>(
-    undefined
-  );
-
-const initialRequests: MedicineRequest[] = [
-  {
-    id: "request-1024",
-    requestNumber: "REQ-1024",
-
-    stockistId: "stockist-1",
-    stockistName: "Shree Pharmacy",
-
-    items: [
-      {
-        medicineId: "med-1",
-        medicineName: "Paracetamol 500mg",
-        quantity: 4,
-        unitPrice: 25,
-        subtotal: 100,
-      },
-      {
-        medicineId: "med-2",
-        medicineName: "Amoxicillin 500mg",
-        quantity: 2,
-        unitPrice: 120,
-        subtotal: 240,
-      },
-    ],
-
-    totalItems: 6,
-    totalAmount: 340,
-
-    status: "PENDING",
-
-    createdAt: "03 Oct 2026",
-  },
-
-  {
-    id: "request-1023",
-    requestNumber: "REQ-1023",
-
-    stockistId: "stockist-2",
-    stockistName: "City Medical",
-
-    items: [
-      {
-        medicineId: "med-3",
-        medicineName: "Cetirizine 10mg",
-        quantity: 5,
-        unitPrice: 45,
-        subtotal: 225,
-      },
-    ],
-
-    totalItems: 5,
-    totalAmount: 225,
-
-    status: "PROCESSING",
-
-    createdAt: "02 Oct 2026",
-  },
-
-  {
-    id: "request-1022",
-    requestNumber: "REQ-1022",
-
-    stockistId: "stockist-3",
-    stockistName: "ABC Pharmacy",
-
-    items: [
-      {
-        medicineId: "med-6",
-        medicineName: "Omeprazole 20mg",
-        quantity: 3,
-        unitPrice: 95,
-        subtotal: 285,
-      },
-    ],
-
-    totalItems: 3,
-    totalAmount: 285,
-
-    status: "COMPLETED",
-
-    createdAt: "01 Oct 2026",
-  },
-];
-
-export function RequestProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [requests, setRequests] =
-    useState<MedicineRequest[]>(
-      initialRequests
-    );
-
-  const createRequest = (
-    input: CreateMedicineRequestInput
-  ) => {
-    const nextNumber =
-      1025 + requests.length;
-
-    const newRequest: MedicineRequest = {
-      id: `request-${Date.now()}`,
-
-      requestNumber: `REQ-${nextNumber}`,
-
-      stockistId: input.stockistId,
-      stockistName: input.stockistName,
-
-      items: input.items,
-
-      totalItems: input.totalItems,
-      totalAmount: input.totalAmount,
-
-      note: input.note,
-
-      status: "PENDING",
-
-      createdAt: new Date().toLocaleDateString(
-        "en-GB",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
-      ),
-    };
-
-    setRequests((current) => [
-      newRequest,
-      ...current,
-    ]);
-
-    return newRequest;
+function mapOrderToRequest(order: Order): MedicineRequestCompatibility {
+  return {
+    id: order.id,
+    requestNumber: order.orderNo,
+    orderType: order.orderType,
+    stockistId: order.stockist?.id || "",
+    stockistName: order.stockist?.name || "Unknown Stockist",
+    toStockistName: order.toStockist?.name,
+    items: order.items.map((item) => ({
+      medicineId: item.productId || item.id,
+      medicineName: item.productName,
+      quantity: item.quantity,
+      bonus: item.bonus,
+      unitPrice: item.rate,
+      subtotal: item.amount,
+    })),
+    totalItems: order.totalQuantity || order.itemCount || order.items.length,
+    totalAmount: order.grandTotal,
+    note: order.rejectionReason || undefined,
+    status: order.status,
+    createdAt: new Date(order.createdAt).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }),
+    rawOrder: order,
   };
+}
+
+export function RequestProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
+
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrders = useCallback(async (params?: OrderQueryParams) => {
+    if (!isAuthenticated) {
+      setOrders([]);
+      setTotal(0);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await orderService.getOrders(params);
+      setOrders(res.orders || []);
+      setTotal(res.total || 0);
+    } catch (err: any) {
+      console.warn("Failed to load orders:", err);
+      setError(err?.message || "Failed to load orders");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOrders();
+    } else {
+      setOrders([]);
+      setTotal(0);
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, fetchOrders]);
+
+  const createOrder = async (input: CreateOrderInput): Promise<Order> => {
+    const newOrder = await orderService.createOrder(input);
+    setOrders((prev) => [newOrder, ...prev]);
+    setTotal((prev) => prev + 1);
+    return newOrder;
+  };
+
+  const getOrderById = async (id: string): Promise<Order | undefined> => {
+    const existing = orders.find((o) => o.id === id);
+    if (existing) {
+      return existing;
+    }
+    try {
+      const fetched = await orderService.getOrder(id);
+      return fetched;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const approveOrder = async (id: string): Promise<Order> => {
+    const updated = await orderService.approveOrder(id);
+    setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    return updated;
+  };
+
+  const rejectOrder = async (id: string, reason?: string): Promise<Order> => {
+    const updated = await orderService.rejectOrder(id, reason);
+    setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    return updated;
+  };
+
+  const createRequest = async (input: {
+    stockistId: string;
+    stockistName?: string;
+    items: {
+      medicineId?: string;
+      medicineName: string;
+      quantity: number;
+      bonus?: number;
+      unitPrice: number;
+      subtotal?: number;
+    }[];
+    note?: string;
+  }): Promise<Order> => {
+    const payload: CreateOrderInput = {
+      stockistId: input.stockistId,
+      items: input.items.map((item) => ({
+        productName: item.medicineName,
+        quantity: item.quantity,
+        bonus: item.bonus ?? 0,
+        rate: item.unitPrice,
+        productId: item.medicineId,
+      })),
+    };
+    return createOrder(payload);
+  };
+
+  const requests = useMemo(
+    () => orders.map(mapOrderToRequest),
+    [orders]
+  );
 
   return (
     <RequestContext.Provider
       value={{
+        orders,
         requests,
+        total,
+        isLoading,
+        error,
+        refreshOrders: fetchOrders,
+        createOrder,
+        getOrderById,
+        approveOrder,
+        rejectOrder,
         createRequest,
       }}
     >
@@ -212,12 +229,8 @@ export function RequestProvider({
 
 export function useRequests() {
   const context = useContext(RequestContext);
-
   if (!context) {
-    throw new Error(
-      "useRequests must be used inside RequestProvider"
-    );
+    throw new Error("useRequests must be used inside RequestProvider");
   }
-
   return context;
 }

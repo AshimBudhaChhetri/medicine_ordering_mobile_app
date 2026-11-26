@@ -1,4 +1,8 @@
-import * as SecureStore from "expo-secure-store";
+import {
+  deleteItemAsync,
+  getItemAsync,
+  setItemAsync,
+} from "./secureStorage";
 
 /**
  * Key used to persist the Better Auth session token.
@@ -17,7 +21,7 @@ const SESSION_TOKEN_KEY =
 export async function saveSessionToken(
   token: string
 ) {
-  await SecureStore.setItemAsync(
+  await setItemAsync(
     SESSION_TOKEN_KEY,
     token
   );
@@ -27,7 +31,7 @@ export async function saveSessionToken(
  * Read the current session token.
  */
 export async function getSessionToken() {
-  return SecureStore.getItemAsync(
+  return getItemAsync(
     SESSION_TOKEN_KEY
   );
 }
@@ -37,7 +41,7 @@ export async function getSessionToken() {
  * or when the backend returns 401.
  */
 export async function clearSessionToken() {
-  await SecureStore.deleteItemAsync(
+  await deleteItemAsync(
     SESSION_TOKEN_KEY
   );
 }

@@ -1,9 +1,12 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { router } from "expo-router";
+import { Image } from "expo-image";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,74 +15,109 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { PendingStatCard } from "../../components/PendingStatCard";
 import { RequestCard } from "../../components/RequestCard";
+import {
+  OrderCardSkeleton,
+  PendingStatCardSkeleton,
+  StatCardSkeleton,
+  StockistRowSkeleton,
+} from "../../components/Skeleton";
 import { StatCard } from "../../components/StatCard";
 import { StockistCard } from "../../components/StockistCard";
 
+import { getMediaUrl } from "../../config/api";
+import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
-
 import { useResponsive } from "../../hooks/useResponsive";
+import { dashboardService } from "../../services/dashboardService";
 import { colors } from "../../theme/colors";
+import { DashboardStats } from "../../types/dashboard";
 
 export default function DashboardScreen() {
-  const { requests } = useRequests();
-
+  const { user, isSuperAdmin } = useAuth();
   const {
-    approvedStockists,
-    approvalRequests,
+    requests,
+    refreshOrders,
+    isLoading: isOrdersLoading,
+  } = useRequests();
+  const {
+    stockists,
+    refreshStockists,
+    isLoading: isStockistsLoading,
   } = useStockists();
 
-  const {
-    isTablet,
-    gutter,
-    contentMaxWidth,
-  } = useResponsive();
+  const { isTablet, gutter, contentMaxWidth } = useResponsive();
 
-  // -----------------------------------------
-  // REQUEST COUNTS
-  // -----------------------------------------
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const statsData = await dashboardService.getStats().catch(() => null);
+      if (statsData) {
+        setStats(statsData);
+      }
+    } catch (err) {
+      console.warn("Failed to load dashboard analytical stats:", err);
+    } finally {
+      setIsStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // Refresh data whenever the home screen comes into view
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData().catch(() => { });
+      refreshOrders().catch(() => { });
+      refreshStockists().catch(() => { });
+    }, [loadDashboardData, refreshOrders, refreshStockists])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      refreshOrders().catch(() => { }),
+      refreshStockists().catch(() => { }),
+      loadDashboardData().catch(() => { }),
+    ]);
+    setIsRefreshing(false);
+  }, [refreshOrders, refreshStockists, loadDashboardData]);
+
+  // Derived counts
   const pendingRequests = requests.filter(
-    (request) => request.status === "PENDING"
+    (request) => request.status?.toLowerCase() === "pending"
   );
+  const completedRequests = requests.filter((r) => {
+    const s = r.status?.toLowerCase();
+    return s === "approved" || s === "completed";
+  });
 
-  const processingRequests = requests.filter(
-    (request) => request.status === "PROCESSING"
-  );
+  const recentRequests = requests.slice(0, 3);
+  const recentStockists = stockists.slice(0, 3);
 
-  const completedRequests = requests.filter(
-    (request) => request.status === "COMPLETED"
-  );
+  const roleLabel =
+    user?.role === "MR"
+      ? "Medical Representative"
+      : user?.role === "MR-head"
+        ? "Branch Head"
+        : user?.role === "superadmin"
+          ? "Super Administrator"
+          : "Staff";
 
-  // -----------------------------------------
-  // STOCKIST APPROVAL COUNT
-  // -----------------------------------------
-
-  const pendingStockistRequests =
-    approvalRequests.filter(
-      (request) => request.status === "PENDING"
-    );
-
-  // -----------------------------------------
-  // RECENT DATA
-  // -----------------------------------------
-
-  const recentRequests = requests
-    .filter(
-      (request) =>
-        request.status !== "CANCELLED"
-    )
-    .slice(0, 3);
-
-  const recentStockists =
-    approvedStockists.slice(0, 3);
-
-  // -----------------------------------------
-  // GREETING
-  // -----------------------------------------
-
-  const greeting = getGreeting();
+  const avatarUrl = getMediaUrl(user?.image);
+  const initials = (user?.name || "MR")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -89,110 +127,109 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingHorizontal: gutter,
-          },
+          { paddingHorizontal: gutter },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View
           style={[
             styles.container,
             contentMaxWidth
               ? {
-                  maxWidth: contentMaxWidth,
-                  alignSelf: "center",
-                  width: "100%",
-                }
+                maxWidth: contentMaxWidth,
+                alignSelf: "center",
+                width: "100%",
+              }
               : undefined,
           ]}
         >
-          {/* =====================================
-              HEADER
-          ====================================== */}
-
+          {/* HEADER */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.greeting}>
-                {greeting} 👋
-              </Text>
-
-              <Text style={styles.name}>
-                Suman Acharya
-              </Text>
-
-              <Text style={styles.role}>
-                Medical Representative
-              </Text>
+              {/* <Text style={styles.name}>{user?.name || "User"}</Text> */}
+              <Text style={styles.name}>MediFlow</Text>
+              <Text style={styles.role}>{roleLabel}</Text>
             </View>
 
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open account settings"
               style={({ pressed }) => [
-                styles.notificationButton,
-                pressed &&
-                  styles.buttonPressed,
+                styles.accountButton,
+                pressed && styles.buttonPressed,
               ]}
+              onPress={() => router.push("/account")}
             >
-              <MaterialCommunityIcons
-                name="bell-outline"
-                size={23}
-                color={colors.text}
-              />
-
-              <View
-                style={styles.notificationDot}
-              />
+              {avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.accountAvatar}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.accountAvatarFallback}>
+                  <Text style={styles.accountInitials}>{initials}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
-          {/* =====================================
-              HERO
-          ====================================== */}
-
-          <View
-            style={[
-              styles.hero,
-              isTablet
-                ? styles.heroTablet
-                : undefined,
-            ]}
-          >
+          {/* HERO QUICK ACTIONS */}
+          <View style={[styles.hero, isTablet ? styles.heroTablet : undefined]}>
             <View style={styles.heroTextArea}>
-              <Text style={styles.heroTitle}>
-                Create a new medicine request
-              </Text>
-
-              <Text
-                style={styles.heroDescription}
-              >
-                Select one of your approved
-                stockists and request the medicines
-                they need.
-              </Text>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.heroButton,
-                  pressed &&
-                    styles.heroButtonPressed,
-                ]}
-                onPress={() =>
-                  router.push(
-                    "/(tabs)/new-request"
-                  )
-                }
-              >
-                <MaterialCommunityIcons
-                  name="plus"
-                  size={19}
-                  color="#FFFFFF"
-                />
-
-                <Text
-                  style={styles.heroButtonText}
+              <View style={styles.heroActionsRow}>
+                {/* New Order Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.heroButton,
+                    pressed && styles.heroButtonPressed,
+                  ]}
+                  onPress={() => router.push("/(tabs)/new-request")}
                 >
-                  New Request
-                </Text>
-              </Pressable>
+                  <MaterialCommunityIcons name="plus" size={19} color="#FFFFFF" />
+                  <Text style={styles.heroButtonText}>New Order</Text>
+                </Pressable>
+
+                {/* My Orders Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.heroSecondaryButton,
+                    pressed && styles.heroButtonPressed,
+                  ]}
+                  onPress={() => router.push("/(tabs)/requests")}
+                >
+                  <MaterialCommunityIcons
+                    name="clipboard-text-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.heroSecondaryText}>My Orders</Text>
+                </Pressable>
+
+                {/* Only superadmin can add products */}
+                {isSuperAdmin && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.heroSecondaryButton,
+                      pressed && styles.heroButtonPressed,
+                    ]}
+                    onPress={() => router.push("/product/add")}
+                  >
+                    <MaterialCommunityIcons
+                      name="pill"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.heroSecondaryText}>Add Product</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             {isTablet && (
@@ -204,303 +241,255 @@ export default function DashboardScreen() {
             )}
           </View>
 
-          {/* =====================================
-              OVERVIEW
-          ====================================== */}
-
-          <Text style={styles.sectionTitle}>
-            Overview
-          </Text>
-
-          <View style={styles.statsGrid}>
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Pending Requests"
-                value={pendingRequests.length}
-                icon="clock-outline"
-                tone="orange"
-              />
-            </View>
-
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Processing"
-                value={
-                  processingRequests.length
-                }
-                icon="progress-clock"
-                tone="blue"
-              />
-            </View>
-
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="Completed"
-                value={
-                  completedRequests.length
-                }
-                icon="check-circle-outline"
-                tone="green"
-              />
-            </View>
-
-            <View style={styles.statWrapper}>
-              <StatCard
-                title="My Stockists"
-                value={
-                  approvedStockists.length
-                }
-                icon="storefront-outline"
-                tone="purple"
-              />
-            </View>
-          </View>
-
-          {/* =====================================
-              STOCKIST APPROVAL ALERT
-          ====================================== */}
-
-          {pendingStockistRequests.length >
-            0 && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.approvalBanner,
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={() =>
-                router.push(
-                  "/(tabs)/stockists"
-                )
-              }
-            >
-              <View
-                style={styles.approvalIcon}
-              >
-                <MaterialCommunityIcons
-                  name="store-plus-outline"
-                  size={22}
-                  color={colors.warning}
-                />
-              </View>
-
-              <View
-                style={
-                  styles.approvalContent
-                }
-              >
-                <Text
-                  style={
-                    styles.approvalTitle
-                  }
+          {/* SUPERADMIN MANAGEMENT SHORTCUTS */}
+          {isSuperAdmin && (
+            <View style={styles.adminShortcutsCard}>
+              <View style={styles.adminShortcutsRow}>
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/admin/users")}
                 >
-                  {
-                    pendingStockistRequests.length
-                  }{" "}
-                  {pendingStockistRequests.length ===
-                  1
-                    ? "stockist request"
-                    : "stockist requests"}{" "}
-                  awaiting approval
-                </Text>
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="account-group-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Users</Text>
+                </Pressable>
 
-                <Text
-                  style={
-                    styles.approvalText
-                  }
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/admin/registrations")}
                 >
-                  You can use these stockists
-                  after Admin approves them.
-                </Text>
-              </View>
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="account-plus-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Registrations</Text>
+                </Pressable>
 
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={22}
-                color={colors.textMuted}
-              />
-            </Pressable>
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/document" as any)}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="folder-open-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Documents</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.adminShortcutItem}
+                  onPress={() => router.push("/product/add")}
+                >
+                  <View style={styles.adminShortcutIcon}>
+                    <MaterialCommunityIcons
+                      name="pill"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <Text style={styles.adminShortcutLabel}>Products</Text>
+                </Pressable>
+              </View>
+            </View>
           )}
 
-          {/* =====================================
-              MAIN CONTENT
-          ====================================== */}
 
+
+          {/* OVERVIEW STATS */}
+
+          <View style={styles.statsGrid}>
+            {isStatsLoading && !stats ? (
+              <>
+                <View style={styles.fullWidth}>
+                  <PendingStatCardSkeleton />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCardSkeleton />
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.fullWidth}>
+                  <PendingStatCard
+                    title="Pending Orders"
+                    value={stats?.pendingOrders ?? pendingRequests.length}
+                    icon="clock-outline"
+                    onPress={() => router.push("/(tabs)/requests")}
+                  />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCard
+                    title="Orders Approved"
+                    value={completedRequests.length}
+                    icon="check-circle"
+                    tone="green"
+                  />
+                </View>
+
+                <View style={styles.statWrapper}>
+                  <StatCard
+                    title="Total Orders"
+                    value={stats?.totalOrders ?? requests.length}
+                    icon="receipt-text-outline"
+                    tone="blue"
+                  />
+                </View>
+
+                {isSuperAdmin ? (
+                  <View style={styles.statWrapper}>
+                    <StatCard
+                      title="Total Users"
+                      value={stats?.totalUsers ?? 0}
+                      icon="account-group-outline"
+                      tone="purple"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.statWrapper}>
+                    <StatCard
+                      title="My Stockists"
+                      value={stockists.length}
+                      icon="storefront-outline"
+                      tone="purple"
+                    />
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+
+          {/* MAIN CONTENT */}
           <View
             style={[
               styles.dashboardContent,
-              isTablet
-                ? styles.dashboardContentTablet
-                : undefined,
+              isTablet ? styles.dashboardContentTablet : undefined,
             ]}
           >
-            {/* =================================
-                RECENT REQUESTS
-            ================================== */}
+            {/* RECENT REQUESTS */}
+            <View style={styles.sectionColumn}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Recent Orders</Text>
 
-            <View
-              style={styles.sectionColumn}
-            >
-              <View
-                style={styles.sectionHeader}
-              >
-                <Text
-                  style={styles.sectionTitle}
-                >
-                  Recent Requests
-                </Text>
-
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      "/(tabs)/requests"
-                    )
-                  }
-                >
-                  <Text
-                    style={styles.viewAll}
-                  >
-                    View all
-                  </Text>
+                <Pressable onPress={() => router.push("/(tabs)/requests")}>
+                  <Text style={styles.viewAll}>View all</Text>
                 </Pressable>
               </View>
 
-              {recentRequests.length > 0 ? (
-                recentRequests.map(
-                  (request) => {
-                    // RequestCard currently supports
-                    // Pending, Processing and Completed.
-                    if (
-                      request.status ===
-                      "CANCELLED"
-                    ) {
-                      return null;
+              {isOrdersLoading && requests.length === 0 ? (
+                <>
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <OrderCardSkeleton key={index} />
+                  ))}
+                </>
+              ) : recentRequests.length > 0 ? (
+                recentRequests.map((request) => (
+                  <Pressable
+                    key={request.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/request/[id]",
+                        params: { id: request.id },
+                      })
                     }
-
-                    return (
-                      <RequestCard
-                        key={request.id}
-                        id={
-                          request.requestNumber
-                        }
-                        stockist={
-                          request.stockistName
-                        }
-                        items={
-                          request.items.length
-                        }
-                        date={
-                          request.createdAt
-                        }
-                        status={
-                          request.status
-                        }
-                      />
-                    );
-                  }
-                )
+                  >
+                    <RequestCard
+                      id={request.requestNumber}
+                      stockist={request.stockistName}
+                      items={request.items.length}
+                      date={request.createdAt}
+                      status={request.status}
+                    />
+                  </Pressable>
+                ))
               ) : (
-                <View
-                  style={styles.emptyCard}
-                >
+                <View style={styles.emptyCard}>
                   <MaterialCommunityIcons
                     name="clipboard-text-outline"
                     size={31}
                     color={colors.textMuted}
                   />
 
-                  <Text
-                    style={
-                      styles.emptyTitle
-                    }
-                  >
-                    No requests yet
-                  </Text>
+                  <Text style={styles.emptyTitle}>No orders yet</Text>
 
-                  <Text
-                    style={
-                      styles.emptyText
-                    }
-                  >
-                    Your recent medicine
-                    requests will appear here.
+                  <Text style={styles.emptyText}>
+                    Your recent medicine orders will appear here.
                   </Text>
                 </View>
               )}
             </View>
 
-            {/* =================================
-                MY STOCKISTS
-            ================================== */}
+            {/* MY STOCKISTS (MR only) */}
+            {!isSuperAdmin && (
+              <View style={styles.sectionColumn}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>My Stockists</Text>
 
-            <View
-              style={styles.sectionColumn}
-            >
-              <View
-                style={styles.sectionHeader}
-              >
-                <Text
-                  style={styles.sectionTitle}
-                >
-                  My Stockists
-                </Text>
+                  <Pressable onPress={() => router.push("/(tabs)/stockists")}>
+                    <Text style={styles.viewAll}>View all</Text>
+                  </Pressable>
+                </View>
 
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      "/(tabs)/stockists"
-                    )
-                  }
-                >
-                  <Text
-                    style={styles.viewAll}
-                  >
-                    View all
-                  </Text>
-                </Pressable>
-              </View>
-
-              {recentStockists.length > 0 ? (
-                recentStockists.map(
-                  (stockist) => (
-                    <StockistCard
+                {isStockistsLoading && stockists.length === 0 ? (
+                  <>
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <StockistRowSkeleton key={index} />
+                    ))}
+                  </>
+                ) : recentStockists.length > 0 ? (
+                  recentStockists.map((stockist) => (
+                    <Pressable
                       key={stockist.id}
-                      name={stockist.name}
-                      location={
-                        stockist.location
+                      onPress={() =>
+                        router.push({
+                          pathname: "/stockist/[id]",
+                          params: { id: stockist.id },
+                        })
                       }
+                    >
+                      <StockistCard
+                        name={stockist.name}
+                        location={stockist.location}
+                      />
+                    </Pressable>
+                  ))
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <MaterialCommunityIcons
+                      name="storefront-outline"
+                      size={31}
+                      color={colors.textMuted}
                     />
-                  )
-                )
-              ) : (
-                <View
-                  style={styles.emptyCard}
-                >
-                  <MaterialCommunityIcons
-                    name="storefront-outline"
-                    size={31}
-                    color={colors.textMuted}
-                  />
 
-                  <Text
-                    style={
-                      styles.emptyTitle
-                    }
-                  >
-                    No approved stockists
-                  </Text>
+                    <Text style={styles.emptyTitle}>No stockists added</Text>
 
-                  <Text
-                    style={
-                      styles.emptyText
-                    }
-                  >
-                    Add a stockist and submit
-                    it for Admin approval.
-                  </Text>
-                </View>
-              )}
-            </View>
+                    <Text style={styles.emptyText}>
+                      Add your stockists to quickly place orders for them.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -508,375 +497,237 @@ export default function DashboardScreen() {
   );
 }
 
-// =============================================
-// GREETING
-// =============================================
-
-function getGreeting() {
-  const hour = new Date().getHours();
-
-  if (hour < 12) {
-    return "Good morning";
-  }
-
-  if (hour < 17) {
-    return "Good afternoon";
-  }
-
-  return "Good evening";
-}
-
-// =============================================
-// STYLES
-// =============================================
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor:
-      colors.background,
+    backgroundColor: colors.background,
   },
-
   scrollContent: {
-    paddingBottom: 120,
+    paddingTop: 12,
+    paddingBottom: 35,
   },
-
   container: {
-    flex: 1,
+    width: "100%",
   },
-
-  // -------------------------------------------
-  // HEADER
-  // -------------------------------------------
-
   header: {
     flexDirection: "row",
-
     justifyContent: "space-between",
-    alignItems: "center",
-
-    paddingTop: 12,
-    paddingBottom: 24,
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
-
-  greeting: {
-    fontSize: 13,
-
-    color:
-      colors.textSecondary,
-  },
-
   name: {
-    marginTop: 3,
-
-    fontSize: 24,
-    fontWeight: "700",
-
+    fontSize: 20,
+    fontWeight: "500",
     color: colors.text,
+    marginTop: 2,
   },
-
   role: {
-    marginTop: 3,
-
     fontSize: 12,
-
-    color:
-      colors.textSecondary,
+    color: colors.primary,
+    marginTop: 2,
+    fontWeight: "400",
   },
-
-  notificationButton: {
-    width: 46,
-    height: 46,
-
-    borderRadius: 23,
-
+  accountButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor:
-      colors.border,
-
-    backgroundColor:
-      colors.card,
-
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  accountAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  accountAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-
-  notificationDot: {
-    position: "absolute",
-
-    width: 8,
-    height: 8,
-
-    borderRadius: 4,
-
-    backgroundColor:
-      colors.danger,
-
-    top: 9,
-    right: 10,
-
-    borderWidth: 1.5,
-    borderColor:
-      colors.card,
-  },
-
-  // -------------------------------------------
-  // HERO
-  // -------------------------------------------
-
-  hero: {
-    backgroundColor: "#EAF1FF",
-
-    borderRadius: 24,
-
-    padding: 22,
-
-    marginBottom: 28,
-  },
-
-  heroTablet: {
-    minHeight: 190,
-
-    flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-
-    alignItems: "center",
-
-    paddingHorizontal: 32,
-  },
-
-  heroTextArea: {
-    maxWidth: 520,
-  },
-
-  heroTitle: {
-    fontSize: 22,
-    lineHeight: 28,
-
-    fontWeight: "700",
-
-    color: colors.text,
-  },
-
-  heroDescription: {
-    marginTop: 8,
-
+  accountInitials: {
     fontSize: 14,
-    lineHeight: 21,
-
-    color:
-      colors.textSecondary,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
-
-  heroButton: {
-    marginTop: 20,
-
-    alignSelf: "flex-start",
-
-    backgroundColor:
-      colors.primary,
-
-    borderRadius: 13,
-
-    paddingVertical: 12,
-    paddingHorizontal: 17,
-
+  hero: {
+    backgroundColor: "transparent",
+    borderColor: colors.border,
+    borderRadius: 2,
+    padding: 0,
+    marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
-
+    justifyContent: "space-between",
+  },
+  heroTablet: {
+    padding: 28,
+  },
+  heroTextArea: {
+    flex: 1,
+  },
+  heroActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  heroButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 9999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
-
+  heroSecondaryButton: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 9999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  heroSecondaryText: {
+    color: colors.primary,
+    fontWeight: "500",
+    fontSize: 13,
+  },
   heroButtonPressed: {
     opacity: 0.88,
-
-    transform: [
-      {
-        scale: 0.98,
-      },
-    ],
+    transform: [{ scale: 0.98 }],
   },
-
   heroButtonText: {
     color: "#FFFFFF",
-
-    fontWeight: "700",
-    fontSize: 14,
+    fontWeight: "500",
+    fontSize: 13,
   },
-
-  // -------------------------------------------
-  // SECTIONS
-  // -------------------------------------------
-
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-
+  adminShortcutsCard: {
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  adminShortcutsTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.text,
+    marginBottom: 12,
+  },
+  adminShortcutsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  adminShortcutItem: {
+    alignItems: "center",
+    gap: 6,
+  },
+  adminShortcutIcon: {
+    backgroundColor: "#FFFFFF",
+    width: 68,
+    height: 68,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminShortcutLabel: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: colors.text,
+    textAlign: "center",
+  },
+  mrDocShortcut: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  mrDocShortcutText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "400",
     color: colors.text,
   },
-
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: colors.text,
+  },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-
     gap: 12,
-
-    marginTop: 14,
-    marginBottom: 22,
+    marginTop: 12,
+    marginBottom: 20,
   },
-
+  fullWidth: {
+    width: "100%",
+  },
   statWrapper: {
-    minWidth: 150,
-
-    flexGrow: 1,
-
-    flexBasis: "47%",
-  },
-
-  // -------------------------------------------
-  // APPROVAL BANNER
-  // -------------------------------------------
-
-  approvalBanner: {
-    backgroundColor:
-      colors.card,
-
-    borderWidth: 1,
-    borderColor: "#F6DCA6",
-
-    borderRadius: 17,
-
-    padding: 14,
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    marginBottom: 28,
-  },
-
-  approvalIcon: {
-    width: 43,
-    height: 43,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      colors.warningSoft,
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  approvalContent: {
+    minWidth: "30%",
+    maxWidth: "30%",
     flex: 1,
-
-    marginHorizontal: 12,
   },
-
-  approvalTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-
-    color: colors.text,
-  },
-
-  approvalText: {
-    marginTop: 4,
-
-    fontSize: 12,
-    lineHeight: 17,
-
-    color:
-      colors.textSecondary,
-  },
-
-  // -------------------------------------------
-  // MAIN CONTENT
-  // -------------------------------------------
-
   dashboardContent: {
-    gap: 26,
+    gap: 24,
   },
-
   dashboardContentTablet: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
-
   sectionColumn: {
     flex: 1,
   },
-
   sectionHeader: {
     flexDirection: "row",
-
-    justifyContent:
-      "space-between",
-
+    justifyContent: "space-between",
     alignItems: "center",
-
-    marginBottom: 13,
+    marginBottom: 12,
   },
-
   viewAll: {
-    fontSize: 13,
-    fontWeight: "600",
-
+    fontSize: 12,
+    fontWeight: "500",
     color: colors.primary,
   },
-
-  // -------------------------------------------
-  // EMPTY STATES
-  // -------------------------------------------
-
   emptyCard: {
-    minHeight: 160,
-
-    padding: 22,
-
-    borderRadius: 17,
-
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor:
-      colors.border,
-
-    backgroundColor:
-      colors.card,
-
-    justifyContent: "center",
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 24,
     alignItems: "center",
   },
-
   emptyTitle: {
-    marginTop: 10,
-
+    marginTop: 8,
     fontSize: 14,
-    fontWeight: "700",
-
+    fontWeight: "500",
     color: colors.text,
   },
-
   emptyText: {
-    marginTop: 5,
-
-    maxWidth: 250,
-
+    marginTop: 3,
+    fontSize: 12,
+    color: colors.textMuted,
     textAlign: "center",
-
-    fontSize: 11,
-    lineHeight: 17,
-
-    color:
-      colors.textSecondary,
+    fontWeight: "400",
   },
-
-  // -------------------------------------------
-  // COMMON
-  // -------------------------------------------
-
   buttonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
 });
