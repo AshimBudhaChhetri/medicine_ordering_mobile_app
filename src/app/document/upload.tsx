@@ -131,9 +131,6 @@ export default function DocumentUploadScreen() {
             </Pressable>
             <View style={styles.headerTitleWrap}>
               <Text style={styles.headerTitle}>Upload Document</Text>
-              <Text style={styles.headerSubtitle}>
-                Attach invoice, prescription, or license
-              </Text>
             </View>
           </View>
 
@@ -184,12 +181,6 @@ export default function DocumentUploadScreen() {
           {/* Link to Order Section */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionHeading}>Linked Order</Text>
-            <Text style={styles.sectionDescription}>
-              {isSuperAdmin
-                ? "Optionally attach this document to a specific order, or leave blank to save to the central library."
-                : "Select the order this document belongs to (required for Medical Representatives)."}
-            </Text>
-
             <Pressable
               style={styles.orderSelectBox}
               onPress={() => setShowOrderPicker(!showOrderPicker)}

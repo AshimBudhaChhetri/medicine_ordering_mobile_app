@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OrderReviewSheet } from "../../components/OrderReviewSheet";
 import { OrderDocumentsModal } from "../../components/OrderDocumentsModal";
-import { StockyLogo } from "../../components/StockyLogo";
+import { TopBar } from "../../components/TopBar";
 import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { Order } from "../../types/order";
@@ -193,19 +193,7 @@ export default function OrdersScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      {/* Top Header Row with Centered Stocky Logo & Bell Icon */}
-      <View style={styles.topBar}>
-        <View style={styles.logoCenterContainer} pointerEvents="none">
-          <StockyLogo height={26} />
-        </View>
-        <Pressable
-          style={styles.bellButton}
-          onPress={() => router.push("/(tabs)/notifications")}
-          accessibilityLabel="Notifications"
-        >
-          <MaterialCommunityIcons name="bell-outline" size={26} color="#000000" />
-        </Pressable>
-      </View>
+      <TopBar />
 
       {/* Header Section: "Orders" Title + Status Pills */}
       <View style={styles.headerSection}>
@@ -409,28 +397,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
-  topBar: {
-    position: "relative",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingHorizontal: 20,
-    paddingTop: 6,
-    paddingBottom: 2,
-    minHeight: 40,
-  },
-  logoCenterContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  bellButton: {
-    padding: 6,
-  },
   headerSection: {
     paddingHorizontal: 20,
     paddingTop: 2,
@@ -445,7 +411,8 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     fontSize: 24,
-    fontWeight: "300",
+    fontStyle: "italic",
+    fontWeight: "normal",
     color: "#000000",
     letterSpacing: -0.5,
   },

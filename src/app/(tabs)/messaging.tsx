@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getMediaUrl } from "../../config/api";
+import { TopBar } from "../../components/TopBar";
 import { useAuth } from "../../context/AuthContext";
 import { ChatConversation, chatService } from "../../services/chatService";
 
@@ -191,9 +192,10 @@ export default function MessagingScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <TopBar />
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.screenTitle}>Messaging</Text>
+        <Text style={styles.screenTitle}>Messages</Text>
         <View style={styles.searchBar}>
           <MaterialCommunityIcons name="magnify" size={20} color="#9CA3AF" />
           <TextInput
@@ -256,8 +258,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   screenTitle: {
-    fontSize: 34,
-    fontWeight: "500",
+    fontSize: 24,
+    fontStyle: "italic",
+    fontWeight: "normal",
     color: "#000000",
     letterSpacing: -0.5,
     marginBottom: 14,

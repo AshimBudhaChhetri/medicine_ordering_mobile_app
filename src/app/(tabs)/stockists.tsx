@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { StockistCardSkeleton } from "../../components/Skeleton";
+import { TopBar } from "../../components/TopBar";
 import { useAuth } from "../../context/AuthContext";
 import { useRequests } from "../../context/RequestContext";
 import { useStockists } from "../../context/StockistContext";
@@ -78,6 +79,7 @@ export default function StockistsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <TopBar />
       <FlatList
         key={isTablet ? "stockists-tablet" : "stockists-phone"}
         data={filteredStockists}
@@ -347,9 +349,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "500",
+    fontSize: 24,
+    fontStyle: "italic",
+    fontWeight: "normal",
     color: "#000000",
+    letterSpacing: -0.5,
   },
   subtitle: {
     marginTop: 4,
