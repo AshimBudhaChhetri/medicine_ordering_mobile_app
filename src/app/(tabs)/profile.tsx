@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getMediaUrl } from "../../config/api";
+import { TopBar } from "../../components/TopBar";
 import { useAuth } from "../../context/AuthContext";
 import { authService } from "../../services/authService";
 
@@ -92,6 +93,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <TopBar />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

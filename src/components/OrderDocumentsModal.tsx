@@ -70,7 +70,6 @@ export function OrderDocumentsModal({ visible, orderId, orderNo, onClose }: Prop
             <View style={styles.emptyContainer}>
               <MaterialCommunityIcons name="file-document-outline" size={40} color="#9CA3AF" />
               <Text style={styles.emptyTitle}>No documents attached</Text>
-              <Text style={styles.emptySubtitle}>No invoices or files uploaded for this order yet.</Text>
             </View>
           ) : (
             <View style={styles.docList}>

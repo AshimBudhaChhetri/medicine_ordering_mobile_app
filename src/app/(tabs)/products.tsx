@@ -21,6 +21,7 @@ import { useProducts } from "../../context/ProductContext";
 import { useResponsive } from "../../hooks/useResponsive";
 import { colors } from "../../theme/colors";
 import { ProductCardSkeleton } from "../../components/Skeleton";
+import { TopBar } from "../../components/TopBar";
 
 export default function ProductsScreen() {
   const { isSuperAdmin } = useAuth();
@@ -86,6 +87,7 @@ export default function ProductsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <TopBar />
       <FlatList
         key={isTablet ? "products-tablet" : "products-phone"}
         data={filteredProducts}
@@ -204,9 +206,6 @@ export default function ProductsScreen() {
             <View style={styles.header}>
               <View style={styles.headerText}>
                 <Text style={styles.title}>Products</Text>
-                <Text style={styles.subtitle}>
-                  {filteredProducts.length} medicines available
-                </Text>
               </View>
 
               {/* Admin Add Product Shortcut */}
@@ -346,9 +345,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "500",
+    fontSize: 24,
+    fontStyle: "italic",
+    fontWeight: "normal",
     color: "#000000",
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,

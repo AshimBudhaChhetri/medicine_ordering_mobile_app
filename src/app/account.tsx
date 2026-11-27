@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { TopBar } from "../components/TopBar";
 import { getMediaUrl } from "../config/api";
 import { useAuth } from "../context/AuthContext";
 import { useResponsive } from "../hooks/useResponsive";
@@ -58,6 +59,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <TopBar />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
